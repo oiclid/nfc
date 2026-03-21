@@ -3,7 +3,6 @@ Structural tests — grow with each stage.
 Run with: pytest test_structure.py -v
 """
 import os
-import sys
 import sqlite3
 import pytest
 
@@ -76,57 +75,45 @@ class TestEntryPoint:
 # ─── Stage 1 Steps 3-5: stubs ────────────────────────────────────────────────
 
 class TestDirectoryStructure:
-    def _exists(self, *parts):
-        return os.path.isfile(os.path.join(ROOT, *parts))
-
-    def _isdir(self, *parts):
-        return os.path.isdir(os.path.join(ROOT, *parts))
-
     def test_src_dir(self):
-        assert self._isdir('src')
+        assert os.path.isdir(os.path.join(ROOT, 'src'))
 
     def test_src_database_dir(self):
-        assert self._isdir('src', 'database')
+        assert os.path.isdir(os.path.join(ROOT, 'src', 'database'))
 
     def test_src_gui_dir(self):
-        assert self._isdir('src', 'gui')
+        assert os.path.isdir(os.path.join(ROOT, 'src', 'gui'))
 
     def test_src_reports_dir(self):
-        assert self._isdir('src', 'reports')
+        assert os.path.isdir(os.path.join(ROOT, 'src', 'reports'))
 
     def test_src_utils_dir(self):
-        assert self._isdir('src', 'utils')
+        assert os.path.isdir(os.path.join(ROOT, 'src', 'utils'))
 
 
 class TestInitFiles:
-    def _exists(self, *parts):
-        return os.path.isfile(os.path.join(ROOT, *parts))
-
     def test_src_init(self):
-        assert self._exists('src', '__init__.py')
+        assert os.path.isfile(os.path.join(ROOT, 'src', '__init__.py'))
 
     def test_database_init(self):
-        assert self._exists('src', 'database', '__init__.py')
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'database', '__init__.py'))
 
     def test_gui_init(self):
-        assert self._exists('src', 'gui', '__init__.py')
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'gui', '__init__.py'))
 
     def test_reports_init(self):
-        assert self._exists('src', 'reports', '__init__.py')
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'reports', '__init__.py'))
 
     def test_utils_init(self):
-        assert self._exists('src', 'utils', '__init__.py')
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'utils', '__init__.py'))
 
 
 class TestDatabaseStubs:
-    def _exists(self, *parts):
-        return os.path.isfile(os.path.join(ROOT, *parts))
-
     def test_db_manager_exists(self):
-        assert self._exists('src', 'database', 'db_manager.py')
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'database', 'db_manager.py'))
 
     def test_migrations_runner_exists(self):
-        assert self._exists('src', 'database', 'migrations.py')
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'database', 'migrations.py'))
 
 
 class TestGUIStubs:
@@ -151,14 +138,11 @@ class TestGUIStubs:
 
 
 class TestReportsAndUtilsStubs:
-    def _exists(self, *parts):
-        return os.path.isfile(os.path.join(ROOT, *parts))
-
     def test_report_generator_exists(self):
-        assert self._exists('src', 'reports', 'report_generator.py')
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'reports', 'report_generator.py'))
 
     def test_utils_init_exists(self):
-        assert self._exists('src', 'utils', '__init__.py')
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'utils', '__init__.py'))
 
 
 # ─── Legacy DB readable ───────────────────────────────────────────────────────
@@ -185,9 +169,7 @@ class TestLegacyDatabase:
 
     def test_member_count_is_327(self):
         conn = sqlite3.connect(os.path.join(ROOT, 'data', 'database.sld'))
-        count = conn.execute(
-            "SELECT COUNT(*) FROM MemberDataTbl"
-        ).fetchone()[0]
+        count = conn.execute("SELECT COUNT(*) FROM MemberDataTbl").fetchone()[0]
         conn.close()
         assert count == 327
 
@@ -222,3 +204,146 @@ class TestLegacyDatabase:
         ).fetchall()]
         conn.close()
         assert 'LoginTbl' in tables
+
+
+# ─── Stage 2: migration ───────────────────────────────────────────────────────
+
+class TestMigrationScript:
+    def test_migrate_script_exists(self):
+        assert os.path.isfile(os.path.join(ROOT, 'migrations', 'migrate.py'))
+
+    def test_migrate_script_not_empty(self):
+        with open(os.path.join(ROOT, 'migrations', 'migrate.py')) as f:
+            content = f.read().strip()
+        assert len(content) > 0
+
+
+class TestMigratedDatabase:
+    DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'nfc_cooperative.db')
+
+    def _conn(self):
+        assert os.path.isfile(self.DB), "nfc_cooperative.db not found — run: python migrations/migrate.py"
+        conn = sqlite3.connect(self.DB)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def test_db_exists(self):
+        assert os.path.isfile(self.DB)
+
+    def test_stations_migrated(self):
+        conn = self._conn()
+        count = conn.execute("SELECT COUNT(*) FROM stations").fetchone()[0]
+        conn.close()
+        assert count == 3
+
+    def test_members_migrated(self):
+        conn = self._conn()
+        count = conn.execute("SELECT COUNT(*) FROM members").fetchone()[0]
+        conn.close()
+        assert count == 327
+
+    def test_members_have_split_names(self):
+        conn = self._conn()
+        m = conn.execute(
+            "SELECT first_name, last_name FROM members WHERE member_id='NFC0001'"
+        ).fetchone()
+        conn.close()
+        assert m['first_name'] == 'JAMES'
+        assert m['last_name']  == 'GEORGE'
+
+    def test_savings_accounts_migrated(self):
+        conn = self._conn()
+        count = conn.execute("SELECT COUNT(*) FROM savings_accounts").fetchone()[0]
+        conn.close()
+        assert count > 0
+
+    def test_savings_balances_positive(self):
+        conn = self._conn()
+        total = conn.execute(
+            "SELECT SUM(current_balance) FROM savings_accounts"
+        ).fetchone()[0]
+        conn.close()
+        assert total > 0
+
+    def test_loans_migrated(self):
+        conn = self._conn()
+        count = conn.execute("SELECT COUNT(*) FROM loans").fetchone()[0]
+        conn.close()
+        assert count > 8000
+
+    def test_loans_have_valid_status(self):
+        conn = self._conn()
+        invalid = conn.execute(
+            "SELECT COUNT(*) FROM loans WHERE status NOT IN ('Active','Completed','Pending','Defaulted')"
+        ).fetchone()[0]
+        conn.close()
+        assert invalid == 0
+
+    def test_users_migrated(self):
+        conn = self._conn()
+        count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        conn.close()
+        assert count == 3
+
+    def test_savings_types_seeded(self):
+        conn = self._conn()
+        count = conn.execute("SELECT COUNT(*) FROM savings_types").fetchone()[0]
+        conn.close()
+        assert count == 4
+
+    def test_loan_types_seeded(self):
+        conn = self._conn()
+        count = conn.execute("SELECT COUNT(*) FROM loan_types").fetchone()[0]
+        conn.close()
+        assert count == 8
+
+    def test_system_settings_seeded(self):
+        conn = self._conn()
+        count = conn.execute("SELECT COUNT(*) FROM system_settings").fetchone()[0]
+        conn.close()
+        assert count >= 10
+
+    def test_member_summary_view_works(self):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM vw_member_summary LIMIT 5"
+        ).fetchall()
+        conn.close()
+        assert len(rows) > 0
+        assert 'total_savings' in rows[0].keys()
+
+    def test_no_orphaned_savings_accounts(self):
+        conn = self._conn()
+        orphans = conn.execute("""
+            SELECT COUNT(*) FROM savings_accounts sa
+            WHERE NOT EXISTS (
+                SELECT 1 FROM members m WHERE m.member_id = sa.member_id
+            )
+        """).fetchone()[0]
+        conn.close()
+        assert orphans == 0
+
+    def test_no_orphaned_loans(self):
+        conn = self._conn()
+        orphans = conn.execute("""
+            SELECT COUNT(*) FROM loans l
+            WHERE NOT EXISTS (
+                SELECT 1 FROM members m WHERE m.member_id = l.member_id
+            )
+        """).fetchone()[0]
+        conn.close()
+        assert orphans == 0
+
+    def test_bank_transactions_migrated(self):
+        conn = self._conn()
+        count = conn.execute("SELECT COUNT(*) FROM bank_transactions").fetchone()[0]
+        conn.close()
+        assert count == 6
+
+    def test_migrations_table_exists(self):
+        conn = self._conn()
+        tables = [r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()]
+        conn.close()
+        assert 'migrations' in tables
