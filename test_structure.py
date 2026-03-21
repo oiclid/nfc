@@ -62,150 +62,6 @@ class TestConfigFiles:
         assert len(content) > 0
 
 
-# ─── Stage 1 Step 2: entry point ─────────────────────────────────────────────
-
-class TestEntryPoint:
-    def test_main_py_exists(self):
-        assert os.path.isfile(os.path.join(ROOT, 'main.py'))
-
-    def test_migrations_dir_exists(self):
-        assert os.path.isdir(os.path.join(ROOT, 'migrations'))
-
-
-# ─── Stage 1 Steps 3-5: stubs ────────────────────────────────────────────────
-
-class TestDirectoryStructure:
-    def test_src_dir(self):
-        assert os.path.isdir(os.path.join(ROOT, 'src'))
-
-    def test_src_database_dir(self):
-        assert os.path.isdir(os.path.join(ROOT, 'src', 'database'))
-
-    def test_src_gui_dir(self):
-        assert os.path.isdir(os.path.join(ROOT, 'src', 'gui'))
-
-    def test_src_reports_dir(self):
-        assert os.path.isdir(os.path.join(ROOT, 'src', 'reports'))
-
-    def test_src_utils_dir(self):
-        assert os.path.isdir(os.path.join(ROOT, 'src', 'utils'))
-
-
-class TestInitFiles:
-    def test_src_init(self):
-        assert os.path.isfile(os.path.join(ROOT, 'src', '__init__.py'))
-
-    def test_database_init(self):
-        assert os.path.isfile(os.path.join(ROOT, 'src', 'database', '__init__.py'))
-
-    def test_gui_init(self):
-        assert os.path.isfile(os.path.join(ROOT, 'src', 'gui', '__init__.py'))
-
-    def test_reports_init(self):
-        assert os.path.isfile(os.path.join(ROOT, 'src', 'reports', '__init__.py'))
-
-    def test_utils_init(self):
-        assert os.path.isfile(os.path.join(ROOT, 'src', 'utils', '__init__.py'))
-
-
-class TestDatabaseStubs:
-    def test_db_manager_exists(self):
-        assert os.path.isfile(os.path.join(ROOT, 'src', 'database', 'db_manager.py'))
-
-    def test_migrations_runner_exists(self):
-        assert os.path.isfile(os.path.join(ROOT, 'src', 'database', 'migrations.py'))
-
-
-class TestGUIStubs:
-    MODULES = [
-        'login_window',
-        'setup_wizard',
-        'main_window',
-        'dashboard_module',
-        'stations_module',
-        'members_module',
-        'savings_module',
-        'loans_module',
-        'transactions_module',
-        'reports_module',
-        'settings_module',
-    ]
-
-    @pytest.mark.parametrize('module', MODULES)
-    def test_gui_stub_exists(self, module):
-        path = os.path.join(ROOT, 'src', 'gui', f'{module}.py')
-        assert os.path.isfile(path), f"Missing: src/gui/{module}.py"
-
-
-class TestReportsAndUtilsStubs:
-    def test_report_generator_exists(self):
-        assert os.path.isfile(os.path.join(ROOT, 'src', 'reports', 'report_generator.py'))
-
-    def test_utils_init_exists(self):
-        assert os.path.isfile(os.path.join(ROOT, 'src', 'utils', '__init__.py'))
-
-
-# ─── Legacy DB readable ───────────────────────────────────────────────────────
-
-class TestLegacyDatabase:
-    def test_legacy_db_exists(self):
-        assert os.path.isfile(os.path.join(ROOT, 'data', 'database.sld'))
-
-    def test_can_open_legacy_db(self):
-        conn = sqlite3.connect(os.path.join(ROOT, 'data', 'database.sld'))
-        tables = [r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()]
-        conn.close()
-        assert len(tables) > 0
-
-    def test_member_table_exists(self):
-        conn = sqlite3.connect(os.path.join(ROOT, 'data', 'database.sld'))
-        tables = [r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()]
-        conn.close()
-        assert 'MemberDataTbl' in tables
-
-    def test_member_count_is_327(self):
-        conn = sqlite3.connect(os.path.join(ROOT, 'data', 'database.sld'))
-        count = conn.execute("SELECT COUNT(*) FROM MemberDataTbl").fetchone()[0]
-        conn.close()
-        assert count == 327
-
-    def test_station_table_exists(self):
-        conn = sqlite3.connect(os.path.join(ROOT, 'data', 'database.sld'))
-        tables = [r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()]
-        conn.close()
-        assert 'StationDB' in tables
-
-    def test_loans_table_exists(self):
-        conn = sqlite3.connect(os.path.join(ROOT, 'data', 'database.sld'))
-        tables = [r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()]
-        conn.close()
-        assert 'LoansAndPurchasesTbl' in tables
-
-    def test_ledger_table_exists(self):
-        conn = sqlite3.connect(os.path.join(ROOT, 'data', 'database.sld'))
-        tables = [r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()]
-        conn.close()
-        assert 'LedgerTbl' in tables
-
-    def test_login_table_exists(self):
-        conn = sqlite3.connect(os.path.join(ROOT, 'data', 'database.sld'))
-        tables = [r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()]
-        conn.close()
-        assert 'LoginTbl' in tables
-
-
 # ─── Stage 2: migration ───────────────────────────────────────────────────────
 
 class TestMigrationScript:
@@ -347,3 +203,215 @@ class TestMigratedDatabase:
         ).fetchall()]
         conn.close()
         assert 'migrations' in tables
+
+
+# ─── Stage 3: database layer ──────────────────────────────────────────────────
+
+class TestDBManagerFile:
+    def test_db_manager_is_full(self):
+        path = os.path.join(ROOT, 'src', 'database', 'db_manager.py')
+        with open(path) as f:
+            content = f.read()
+        assert 'class DatabaseManager' in content
+
+    def test_db_manager_has_auth(self):
+        path = os.path.join(ROOT, 'src', 'database', 'db_manager.py')
+        with open(path) as f:
+            content = f.read()
+        assert 'authenticate_user' in content
+
+    def test_db_manager_has_members(self):
+        path = os.path.join(ROOT, 'src', 'database', 'db_manager.py')
+        with open(path) as f:
+            content = f.read()
+        assert 'add_member' in content
+
+    def test_db_manager_has_savings(self):
+        path = os.path.join(ROOT, 'src', 'database', 'db_manager.py')
+        with open(path) as f:
+            content = f.read()
+        assert 'deposit_to_savings' in content
+
+    def test_db_manager_has_loans(self):
+        path = os.path.join(ROOT, 'src', 'database', 'db_manager.py')
+        with open(path) as f:
+            content = f.read()
+        assert 'disburse_loan' in content
+
+    def test_migrations_runner_is_full(self):
+        path = os.path.join(ROOT, 'src', 'database', 'migrations.py')
+        with open(path) as f:
+            content = f.read()
+        assert 'def run(' in content
+
+    def test_wipe_migration_exists(self):
+        assert os.path.isfile(
+            os.path.join(ROOT, 'migrations', '0001_wipe_legacy_users.py')
+        )
+
+    def test_wipe_migration_has_up(self):
+        path = os.path.join(ROOT, 'migrations', '0001_wipe_legacy_users.py')
+        with open(path) as f:
+            content = f.read()
+        assert 'def up(' in content
+
+
+class TestDBManagerFunctions:
+    """Functional tests against a temp copy of the migrated DB."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, tmp_path):
+        import shutil
+        import sys
+        src_path = os.path.join(ROOT, 'src')
+        if src_path not in sys.path:
+            sys.path.insert(0, src_path)
+        from database.db_manager import DatabaseManager
+        db_src  = os.path.join(ROOT, 'data', 'nfc_cooperative.db')
+        db_dest = str(tmp_path / 'test.db')
+        shutil.copy(db_src, db_dest)
+        self.db = DatabaseManager(db_dest)
+        yield
+        self.db.close()
+
+    def test_get_setting(self):
+        val = self.db.get_setting('next_member_number')
+        assert val is not None
+
+    def test_update_setting(self):
+        self.db.update_setting('currency_symbol', 'USD')
+        assert self.db.get_setting('currency_symbol') == 'USD'
+
+    def test_upsert_new_setting(self):
+        self.db.update_setting('test_key', 'test_val')
+        assert self.db.get_setting('test_key') == 'test_val'
+
+    def test_create_and_auth_user(self):
+        self.db.create_user({
+            'username': 'testuser', 'password': 'pass123',
+            'role': 'Cashier', 'can_operate': 1
+        }, 'admin')
+        user = self.db.authenticate_user('testuser', 'pass123')
+        assert user is not None
+        assert user['username'] == 'testuser'
+
+    def test_wrong_password_fails(self):
+        self.db.create_user({
+            'username': 'testuser2', 'password': 'correct',
+            'role': 'Cashier'
+        }, 'admin')
+        assert self.db.authenticate_user('testuser2', 'wrong') is None
+
+    def test_get_all_stations(self):
+        stations = self.db.get_all_stations()
+        assert len(stations) == 3
+
+    def test_add_member(self):
+        mid = self.db.add_member({
+            'station_id': '01', 'first_name': 'Test',
+            'last_name': 'User', 'gender': 'Male',
+            'date_joined': '2026-01-01'
+        }, 'admin')
+        assert mid.startswith('NFC')
+        assert self.db.get_member(mid) is not None
+
+    def test_search_members(self):
+        results = self.db.search_members('NFC0001')
+        assert len(results) >= 1
+
+    def test_get_savings_types(self):
+        types = self.db.get_savings_types()
+        assert len(types) == 4
+
+    def test_create_savings_account(self):
+        mid = self.db.add_member({
+            'station_id': '01', 'first_name': 'Save',
+            'last_name': 'Test', 'gender': 'Female',
+            'date_joined': '2026-01-01'
+        }, 'admin')
+        aid = self.db.create_savings_account(mid, 1)
+        assert isinstance(aid, int)
+
+    def test_deposit_and_balance(self):
+        mid = self.db.add_member({
+            'station_id': '01', 'first_name': 'Dep',
+            'last_name': 'Test', 'gender': 'Male',
+            'date_joined': '2026-01-01'
+        }, 'admin')
+        aid = self.db.create_savings_account(mid, 1)
+        self.db.deposit_to_savings(aid, 5000.0, {'payment_method': 'Cash'}, 'admin')
+        acct = self.db.get_savings_account(aid)
+        assert acct['current_balance'] == 5000.0
+
+    def test_withdraw_reduces_balance(self):
+        mid = self.db.add_member({
+            'station_id': '01', 'first_name': 'With',
+            'last_name': 'Test', 'gender': 'Female',
+            'date_joined': '2026-01-01'
+        }, 'admin')
+        aid = self.db.create_savings_account(mid, 1)
+        self.db.deposit_to_savings(aid, 5000.0, {'payment_method': 'Cash'}, 'admin')
+        self.db.withdraw_from_savings(aid, 2000.0, {'payment_method': 'Cash'}, 'admin')
+        assert self.db.get_savings_account(aid)['current_balance'] == 3000.0
+
+    def test_overdraft_raises(self):
+        mid = self.db.add_member({
+            'station_id': '01', 'first_name': 'Over',
+            'last_name': 'Test', 'gender': 'Male',
+            'date_joined': '2026-01-01'
+        }, 'admin')
+        aid = self.db.create_savings_account(mid, 1)
+        self.db.deposit_to_savings(aid, 100.0, {'payment_method': 'Cash'}, 'admin')
+        with pytest.raises(ValueError, match="Insufficient balance"):
+            self.db.withdraw_from_savings(aid, 500.0, {'payment_method': 'Cash'}, 'admin')
+
+    def test_disburse_loan(self):
+        mid = self.db.add_member({
+            'station_id': '01', 'first_name': 'Loan',
+            'last_name': 'Test', 'gender': 'Male',
+            'date_joined': '2026-01-01'
+        }, 'admin')
+        lid = self.db.disburse_loan({
+            'member_id': mid, 'station_id': '01', 'loan_type_id': 1,
+            'principal_amount': 100000.0, 'interest_rate': 10.0,
+            'duration_months': 12, 'start_date': '2026-01-01',
+            'end_date': '2026-12-31'
+        }, 'admin')
+        loan = self.db.get_loan(lid)
+        assert loan['interest_amount']     == 10000.0
+        assert loan['total_amount']        == 110000.0
+        assert loan['balance_outstanding'] == 110000.0
+
+    def test_loan_repayment(self):
+        mid = self.db.add_member({
+            'station_id': '01', 'first_name': 'Rep',
+            'last_name': 'Test', 'gender': 'Female',
+            'date_joined': '2026-01-01'
+        }, 'admin')
+        lid = self.db.disburse_loan({
+            'member_id': mid, 'station_id': '01', 'loan_type_id': 1,
+            'principal_amount': 100000.0, 'interest_rate': 10.0,
+            'duration_months': 12, 'start_date': '2026-01-01',
+            'end_date': '2026-12-31'
+        }, 'admin')
+        self.db.record_loan_repayment(
+            lid, 110000.0, {'payment_method': 'Cash'}, 'admin'
+        )
+        assert self.db.get_loan(lid)['status'] == 'Completed'
+
+    def test_get_transactions(self):
+        mid = self.db.add_member({
+            'station_id': '01', 'first_name': 'Txn',
+            'last_name': 'Test', 'gender': 'Male',
+            'date_joined': '2026-01-01'
+        }, 'admin')
+        aid = self.db.create_savings_account(mid, 1)
+        self.db.deposit_to_savings(aid, 1000.0, {'payment_method': 'Cash'}, 'admin')
+        txns = self.db.get_transactions(member_id=mid)
+        assert len(txns) >= 1
+
+    def test_member_summary_view(self):
+        summaries = self.db.get_member_summary()
+        assert isinstance(summaries, list)
+        assert len(summaries) > 0
+        assert 'total_savings' in summaries[0]

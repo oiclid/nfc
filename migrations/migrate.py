@@ -442,7 +442,7 @@ def migrate():
 
     # ── System settings ──────────────────────────────────────────────────────
     settings = [
-        ('next_member_number',              '328'),
+        ('next_member_number',              '330'),
         ('next_station_number',             '4'),
         ('interest_auto_calculate',         '1'),
         ('death_benefit_enabled',           '1'),
