@@ -162,3 +162,18 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.env
+data/*.db
+data/reports/
+*.sld.bak
+.pytest_cache/
+.coverage
+*.egg-info/
+dist/
+build/
