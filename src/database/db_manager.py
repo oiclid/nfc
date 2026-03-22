@@ -246,6 +246,20 @@ class DatabaseManager:
         )
         self.commit()
 
+    def reactivate_member(self, member_id: str, modified_by: str):
+        self.execute(
+            "UPDATE members SET is_active=1, modified_by=?, modified_date=? WHERE member_id=?",
+            (modified_by, datetime.now().isoformat(), member_id)
+        )
+        self.commit()
+
+    def reactivate_member(self, member_id: str, modified_by: str):
+        self.execute(
+            "UPDATE members SET is_active=1, modified_by=?, modified_date=? WHERE member_id=?",
+            (modified_by, datetime.now().isoformat(), member_id)
+        )
+        self.commit()
+
     def mark_member_deceased(self, member_id: str, deceased_date: str, modified_by: str):
         self.execute(
             """UPDATE members SET is_deceased=1, is_active=0,
