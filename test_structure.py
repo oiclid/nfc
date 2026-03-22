@@ -415,3 +415,112 @@ class TestDBManagerFunctions:
         assert isinstance(summaries, list)
         assert len(summaries) > 0
         assert 'total_savings' in summaries[0]
+
+
+# ─── Stage 4: auth ────────────────────────────────────────────────────────────
+
+class TestAuthFiles:
+    def _content(self, *parts):
+        with open(os.path.join(ROOT, *parts)) as f:
+            return f.read()
+
+    def test_main_py_is_full(self):
+        assert 'class NFCApp' in self._content('main.py')
+
+    def test_main_py_has_migration_runner(self):
+        assert 'run_migrations' in self._content('main.py')
+
+    def test_main_py_has_first_launch_check(self):
+        assert 'get_all_users' in self._content('main.py')
+
+    def test_main_py_has_setup_wizard(self):
+        assert 'SetupWizard' in self._content('main.py')
+
+    def test_main_py_has_login_window(self):
+        assert 'LoginWindow' in self._content('main.py')
+
+    def test_login_window_is_full(self):
+        assert 'class LoginWindow' in self._content('src', 'gui', 'login_window.py')
+
+    def test_login_window_has_signal(self):
+        assert 'login_successful' in self._content('src', 'gui', 'login_window.py')
+
+    def test_login_window_has_auth(self):
+        assert 'authenticate_user' in self._content('src', 'gui', 'login_window.py')
+
+    def test_setup_wizard_is_full(self):
+        assert 'class SetupWizard' in self._content('src', 'gui', 'setup_wizard.py')
+
+    def test_setup_wizard_has_signal(self):
+        assert 'setup_complete' in self._content('src', 'gui', 'setup_wizard.py')
+
+    def test_setup_wizard_has_validation(self):
+        content = self._content('src', 'gui', 'setup_wizard.py')
+        assert 'len(password)' in content
+
+    def test_setup_wizard_creates_admin(self):
+        content = self._content('src', 'gui', 'setup_wizard.py')
+        assert 'create_user' in content
+        assert "'Admin'" in content
+
+
+class TestPurgeMigration:
+    def test_purge_migration_exists(self):
+        assert os.path.isfile(
+            os.path.join(ROOT, 'migrations', '0002_purge_members.py')
+        )
+
+    def test_purge_migration_has_up(self):
+        with open(os.path.join(ROOT, 'migrations', '0002_purge_members.py')) as f:
+            content = f.read()
+        assert 'def up(' in content
+
+    def test_purge_migration_has_126_ids(self):
+        with open(os.path.join(ROOT, 'migrations', '0002_purge_members.py')) as f:
+            content = f.read()
+        assert content.count("'NFC") == 126
+
+    def test_purge_migration_renumbers(self):
+        with open(os.path.join(ROOT, 'migrations', '0002_purge_members.py')) as f:
+            content = f.read()
+        assert 'next_member_number' in content
+
+    def test_purge_result_on_temp_db(self, tmp_path):
+        import shutil
+        import importlib.util
+        db_src  = os.path.join(ROOT, 'data', 'nfc_cooperative.db')
+        db_dest = str(tmp_path / 'test.db')
+        shutil.copy(db_src, db_dest)
+
+        spec   = importlib.util.spec_from_file_location(
+            'purge', os.path.join(ROOT, 'migrations', '0002_purge_members.py')
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        conn = sqlite3.connect(db_dest)
+        conn.row_factory = sqlite3.Row
+        module.up(conn)
+
+        count    = conn.execute("SELECT COUNT(*) FROM members").fetchone()[0]
+        next_num = conn.execute(
+            "SELECT setting_value FROM system_settings WHERE setting_key='next_member_number'"
+        ).fetchone()[0]
+        orphaned_savings = conn.execute(
+            """SELECT COUNT(*) FROM savings_accounts sa
+               WHERE NOT EXISTS (SELECT 1 FROM members m WHERE m.member_id=sa.member_id)"""
+        ).fetchone()[0]
+        orphaned_loans = conn.execute(
+            """SELECT COUNT(*) FROM loans l
+               WHERE NOT EXISTS (SELECT 1 FROM members m WHERE m.member_id=l.member_id)"""
+        ).fetchone()[0]
+        ids  = [r[0] for r in conn.execute("SELECT member_id FROM members ORDER BY member_id").fetchall()]
+        nums = [int(mid[3:]) for mid in ids]
+        gaps = [i for i in range(1, len(nums) + 1) if i not in nums]
+        conn.close()
+
+        assert count == 203
+        assert next_num == '204'
+        assert orphaned_savings == 0
+        assert orphaned_loans   == 0
+        assert gaps             == []
