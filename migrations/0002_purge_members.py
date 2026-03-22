@@ -88,6 +88,16 @@ def up(conn: sqlite3.Connection):
                 )
             except Exception:
                 pass
+        # update account_number text field to match new member_id
+        try:
+            conn.execute(
+                """UPDATE savings_accounts
+                   SET account_number = REPLACE(account_number, ?, ?)
+                   WHERE member_id=?""",
+                (old_id, new_id, new_id)
+            )
+        except Exception:
+            pass
         conn.execute(
             "UPDATE members SET member_id=?, registration_number=? WHERE member_id=?",
             (new_id, new_id, old_id)
