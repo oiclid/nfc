@@ -524,3 +524,48 @@ class TestPurgeMigration:
         assert orphaned_savings == 0
         assert orphaned_loans   == 0
         assert gaps             == []
+
+
+# ─── Stage 5: main window ─────────────────────────────────────────────────────
+
+class TestMainWindow:
+    def _content(self):
+        with open(os.path.join(ROOT, 'src', 'gui', 'main_window.py')) as f:
+            return f.read()
+
+    def test_main_window_exists(self):
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'gui', 'main_window.py'))
+
+    def test_main_window_has_class(self):
+        assert 'class MainWindow' in self._content()
+
+    def test_main_window_has_sidebar(self):
+        assert '_build_sidebar' in self._content()
+
+    def test_main_window_has_header(self):
+        assert '_build_header' in self._content()
+
+    def test_main_window_has_stack(self):
+        assert 'QStackedWidget' in self._content()
+
+    def test_main_window_has_role_checks(self):
+        content = self._content()
+        assert 'can_maintain' in content
+        assert 'can_operate' in content
+        assert 'can_view_reports' in content
+
+    def test_main_window_has_switch(self):
+        assert '_switch' in self._content()
+
+    def test_main_window_has_logout(self):
+        assert '_logout' in self._content()
+
+    def test_main_window_has_status_bar(self):
+        assert '_update_status' in self._content()
+
+    def test_main_window_loads_all_modules(self):
+        content = self._content()
+        for mod in ['DashboardModule', 'StationsModule', 'MembersModule',
+                    'SavingsModule', 'LoansModule', 'TransactionsModule',
+                    'ReportsModule', 'SettingsModule']:
+            assert mod in content, f"Missing: {mod}"
