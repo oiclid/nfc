@@ -2,8 +2,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox,
     QDialog, QFormLayout, QLineEdit, QDialogButtonBox, QGroupBox,
-    QComboBox, QCheckBox, QTabWidget, QDateEdit, QTextEdit,
-    QSplitter, QFrame, QScrollArea
+    QComboBox, QCheckBox, QTabWidget, QDateEdit, QScrollArea
 )
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QFont, QColor
@@ -109,12 +108,21 @@ class MembersModule(QWidget):
             self.deactivate_btn.setFixedHeight(34)
             self.deactivate_btn.setEnabled(False)
             self.deactivate_btn.clicked.connect(self._deactivate_member)
+            self.deactivate_btn.setStyleSheet("QPushButton:enabled { color: #E74C3C; }")
             btn_row.addWidget(self.deactivate_btn)
+
+            self.reactivate_btn = QPushButton("Reactivate")
+            self.reactivate_btn.setFixedHeight(34)
+            self.reactivate_btn.setEnabled(False)
+            self.reactivate_btn.clicked.connect(self._reactivate_member)
+            self.reactivate_btn.setStyleSheet("QPushButton:enabled { color: #27AE60; }")
+            btn_row.addWidget(self.reactivate_btn)
 
             self.deceased_btn = QPushButton("Mark Deceased")
             self.deceased_btn.setFixedHeight(34)
             self.deceased_btn.setEnabled(False)
             self.deceased_btn.clicked.connect(self._mark_deceased)
+            self.deceased_btn.setStyleSheet("QPushButton:enabled { color: #8E44AD; }")
             btn_row.addWidget(self.deceased_btn)
 
         btn_row.addStretch()
@@ -141,6 +149,25 @@ class MembersModule(QWidget):
         )
         return reply == QMessageBox.StandardButton.Yes
 
+    def _severe_warning(self, title: str, warning: str, confirm_word: str) -> bool:
+        from PyQt6.QtWidgets import QInputDialog
+        msg = QMessageBox(self)
+        msg.setWindowTitle(title)
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setText("<b>WARNING — This action requires administrator authorisation.</b>")
+        msg.setInformativeText(warning)
+        msg.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        msg.setDefaultButton(QMessageBox.StandardButton.No)
+        if msg.exec() != QMessageBox.StandardButton.Yes:
+            return False
+        text, ok = QInputDialog.getText(
+            self, "Confirm Action",
+            f"Type  {confirm_word}  to confirm:"
+        )
+        return ok and text.strip().upper() == confirm_word.upper()
+
     def _selected_member_id(self):
         row = self.table.currentRow()
         if row < 0:
@@ -149,15 +176,18 @@ class MembersModule(QWidget):
         return item.data(Qt.ItemDataRole.UserRole) if item else None
 
     def _on_selection(self):
-        mid = self._selected_member_id()
-        has = mid is not None
+        mid    = self._selected_member_id()
+        has    = mid is not None
         self.view_btn.setEnabled(has)
+
         if self._is_admin():
-            member = self.db.get_member(mid) if mid else None
-            active = member and member['is_active'] and not member['is_deceased']
+            member   = self.db.get_member(mid) if mid else None
+            is_active   = bool(member and member['is_active'] and not member['is_deceased'])
+            is_inactive = bool(member and not member['is_active'] and not member['is_deceased'])
             self.edit_btn.setEnabled(has)
-            self.deactivate_btn.setEnabled(bool(active))
-            self.deceased_btn.setEnabled(bool(active))
+            self.deactivate_btn.setEnabled(is_active)
+            self.reactivate_btn.setEnabled(is_inactive)
+            self.deceased_btn.setEnabled(is_active)
 
     def _full_name(self, m) -> str:
         parts = [m['first_name'], m.get('middle_name'), m['last_name']]
@@ -172,16 +202,11 @@ class MembersModule(QWidget):
         station_id    = self.station_filter.currentData()
         status_filter = self.status_filter.currentText()
 
-        if search:
-            members = self.db.search_members(search)
-        else:
-            members = self.db.get_all_members(active_only=False)
+        members = self.db.search_members(search) if search else self.db.get_all_members(active_only=False)
 
-        # apply station filter
         if station_id:
             members = [m for m in members if m['station_id'] == station_id]
 
-        # apply status filter
         if status_filter == "Active":
             members = [m for m in members if m['is_active'] and not m['is_deceased']]
         elif status_filter == "Inactive":
@@ -189,14 +214,14 @@ class MembersModule(QWidget):
         elif status_filter == "Deceased":
             members = [m for m in members if m['is_deceased']]
 
-        # station name lookup
-        stations = {s['station_id']: s['station_name'] for s in self.db.get_all_stations(enabled_only=False)}
+        stations = {s['station_id']: s['station_name']
+                    for s in self.db.get_all_stations(enabled_only=False)}
 
         self.table.setRowCount(len(members))
         for row, m in enumerate(members):
-            def cell(val, align=Qt.AlignmentFlag.AlignLeft):
+            def cell(val):
                 item = QTableWidgetItem(str(val) if val else "")
-                item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | align)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
                 return item
 
             id_item = cell(m['member_id'])
@@ -210,14 +235,11 @@ class MembersModule(QWidget):
             self.table.setItem(row, 6, cell(m['grade_level'] or ""))
 
             if m['is_deceased']:
-                status = "Deceased"
-                color  = QColor("#E74C3C")
+                status, color = "Deceased", QColor("#8E44AD")
             elif not m['is_active']:
-                status = "Inactive"
-                color  = QColor("#F39C12")
+                status, color = "Inactive", QColor("#E74C3C")
             else:
-                status = "Active"
-                color  = QColor("#27AE60")
+                status, color = "Active", QColor("#27AE60")
 
             status_item = QTableWidgetItem(status)
             status_item.setForeground(color)
@@ -225,7 +247,14 @@ class MembersModule(QWidget):
 
         self.table.resizeColumnsToContents()
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.summary.setText(f"{len(members)} member(s) shown")
+
+        active   = sum(1 for m in members if m['is_active'] and not m['is_deceased'])
+        inactive = sum(1 for m in members if not m['is_active'] and not m['is_deceased'])
+        deceased = sum(1 for m in members if m['is_deceased'])
+        self.summary.setText(
+            f"{len(members)} member(s) shown  —  "
+            f"Active: {active}  |  Inactive: {inactive}  |  Deceased: {deceased}"
+        )
 
     def _on_search(self):
         self.refresh()
@@ -237,13 +266,16 @@ class MembersModule(QWidget):
     def _add_member(self):
         dlg = MemberDialog(self.db, parent=self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            if not self._confirm("Confirm Add Member",
-                                 f"Add new member '{dlg.data()['first_name']} "
-                                 f"{dlg.data()['last_name']}'?"):
+            d = dlg.data()
+            if not self._confirm(
+                "Confirm Add Member",
+                f"Add new member '{d['first_name']} {d['last_name']}'?\n\n"
+                "Note: Member IDs are permanent and never reassigned."
+            ):
                 return
             try:
-                mid = self.db.add_member(dlg.data(), self.user['username'])
-                QMessageBox.information(self, "Success",
+                mid = self.db.add_member(d, self.user['username'])
+                QMessageBox.information(self, "Member Added",
                                         f"Member added successfully.\nID: {mid}")
                 self.refresh()
             except Exception as e:
@@ -274,36 +306,87 @@ class MembersModule(QWidget):
         member = self.db.get_member(mid)
         if not member:
             return
-        dlg = MemberViewDialog(self.db, member, parent=self)
-        dlg.exec()
+        MemberViewDialog(self.db, member, parent=self).exec()
 
     def _deactivate_member(self):
         mid = self._selected_member_id()
         if not mid:
             return
+        if not self._is_admin():
+            QMessageBox.warning(self, "Access Denied", "Only administrators can deactivate members.")
+            return
         member = self.db.get_member(mid)
         if not member:
             return
-        if not self._confirm("Confirm Deactivate Member",
-                             f"Deactivate '{self._full_name(member)}'?\n"
-                             "This will mark the member as inactive."):
+        name = self._full_name(member)
+        if not self._severe_warning(
+            "Deactivate Member",
+            f"You are about to deactivate member {member['member_id']} — {name}.\n\n"
+            "This will immediately suspend all operations for this member.\n"
+            "They will no longer appear in active member lists.\n\n"
+            "Their member ID is permanently retained and will NEVER be reassigned.\n\n"
+            "You can reactivate them at any time.",
+            "DEACTIVATE"
+        ):
             return
         try:
             self.db.deactivate_member(mid, self.user['username'])
             self.refresh()
+            QMessageBox.information(self, "Member Deactivated",
+                                    f"{name} has been deactivated.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to deactivate member:\n{e}")
+
+    def _reactivate_member(self):
+        mid = self._selected_member_id()
+        if not mid:
+            return
+        if not self._is_admin():
+            QMessageBox.warning(self, "Access Denied", "Only administrators can reactivate members.")
+            return
+        member = self.db.get_member(mid)
+        if not member:
+            return
+        name = self._full_name(member)
+        if not self._severe_warning(
+            "Reactivate Member",
+            f"You are about to reactivate member {member['member_id']} — {name}.\n\n"
+            "This will restore their active status and allow all operations\n"
+            "to resume for this member.\n\n"
+            "Ensure all documentation is in order before proceeding.",
+            "REACTIVATE"
+        ):
+            return
+        try:
+            self.db.reactivate_member(mid, self.user['username'])
+            self.refresh()
+            QMessageBox.information(self, "Member Reactivated",
+                                    f"{name} has been reactivated.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to reactivate member:\n{e}")
 
     def _mark_deceased(self):
         mid = self._selected_member_id()
         if not mid:
             return
+        if not self._is_admin():
+            QMessageBox.warning(self, "Access Denied", "Only administrators can mark members as deceased.")
+            return
         member = self.db.get_member(mid)
         if not member:
             return
-        if not self._confirm("Confirm Mark Deceased",
-                             f"Mark '{self._full_name(member)}' as deceased?\n"
-                             "This action will also process the death benefit."):
+        name = self._full_name(member)
+        if not self._severe_warning(
+            "Mark Member as Deceased",
+            f"You are about to mark member {member['member_id']} — {name} — as DECEASED.\n\n"
+            "THIS ACTION IS IRREVERSIBLE.\n\n"
+            "The member will be permanently marked as deceased.\n"
+            "All active operations for this member will be suspended.\n"
+            "Their record will be retained for audit and historical purposes.\n\n"
+            "The death benefit process must be completed separately from Settings.\n\n"
+            "Only proceed if you have verified the member's death certificate.",
+            "DECEASED"
+        ):
             return
         try:
             self.db.mark_member_deceased(
@@ -313,9 +396,9 @@ class MembersModule(QWidget):
             )
             self.refresh()
             QMessageBox.information(
-                self, "Member Marked Deceased",
-                f"'{self._full_name(member)}' has been marked as deceased.\n"
-                "Process the death benefit from the Death Benefits section in Settings."
+                self, "Member Marked as Deceased",
+                f"{name} has been marked as deceased.\n\n"
+                "Please process the death benefit from Settings > Death Benefits."
             )
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to mark member as deceased:\n{e}")
@@ -342,9 +425,9 @@ class MemberDialog(QDialog):
         layout.setSpacing(12)
 
         tabs = QTabWidget()
-        tabs.addTab(self._personal_tab(),  "Personal")
-        tabs.addTab(self._contact_tab(),   "Contact")
-        tabs.addTab(self._nok_tab(),       "Next of Kin")
+        tabs.addTab(self._personal_tab(), "Personal")
+        tabs.addTab(self._contact_tab(),  "Contact")
+        tabs.addTab(self._nok_tab(),      "Next of Kin")
         layout.addWidget(tabs)
 
         buttons = QDialogButtonBox(
@@ -355,9 +438,9 @@ class MemberDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-    def _field(self, placeholder="", height=36):
+    def _field(self, placeholder=""):
         f = QLineEdit()
-        f.setFixedHeight(height)
+        f.setFixedHeight(36)
         f.setPlaceholderText(placeholder)
         return f
 
@@ -387,19 +470,19 @@ class MemberDialog(QDialog):
         self.date_joined.setDate(QDate.currentDate())
         self.date_joined.setDisplayFormat("dd/MM/yyyy")
 
-        self.dob_input     = self._field("Optional (YYYY-MM-DD)")
+        self.dob_input      = self._field("Optional (YYYY-MM-DD)")
         self.employee_input = self._field("Optional")
         self.grade_input    = self._field("Optional")
 
-        form.addRow("First Name:",   self.first_name_input)
-        form.addRow("Middle Name:",  self.middle_name_input)
-        form.addRow("Last Name:",    self.last_name_input)
-        form.addRow("Gender:",       self.gender_combo)
-        form.addRow("Station:",      self.station_combo)
-        form.addRow("Date Joined:",  self.date_joined)
+        form.addRow("First Name:",    self.first_name_input)
+        form.addRow("Middle Name:",   self.middle_name_input)
+        form.addRow("Last Name:",     self.last_name_input)
+        form.addRow("Gender:",        self.gender_combo)
+        form.addRow("Station:",       self.station_combo)
+        form.addRow("Date Joined:",   self.date_joined)
         form.addRow("Date of Birth:", self.dob_input)
-        form.addRow("Employee ID:",  self.employee_input)
-        form.addRow("Grade Level:",  self.grade_input)
+        form.addRow("Employee ID:",   self.employee_input)
+        form.addRow("Grade Level:",   self.grade_input)
         return w
 
     def _contact_tab(self):
@@ -424,30 +507,28 @@ class MemberDialog(QDialog):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
 
-        # NOK 1
-        g1   = QGroupBox("Next of Kin 1")
-        f1   = QFormLayout(g1)
+        g1 = QGroupBox("Next of Kin 1")
+        f1 = QFormLayout(g1)
         f1.setSpacing(8)
         f1.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        self.nok1_name   = self._field("Full name")
-        self.nok1_rel    = self._field("e.g. Wife, Son")
-        self.nok1_addr   = self._field("Address")
-        self.nok1_phone  = self._field("Phone number")
+        self.nok1_name  = self._field("Full name")
+        self.nok1_rel   = self._field("e.g. Wife, Son")
+        self.nok1_addr  = self._field("Address")
+        self.nok1_phone = self._field("Phone number")
         f1.addRow("Name:",         self.nok1_name)
         f1.addRow("Relationship:", self.nok1_rel)
         f1.addRow("Address:",      self.nok1_addr)
         f1.addRow("Phone:",        self.nok1_phone)
         layout.addWidget(g1)
 
-        # NOK 2
-        g2   = QGroupBox("Next of Kin 2 (Optional)")
-        f2   = QFormLayout(g2)
+        g2 = QGroupBox("Next of Kin 2 (Optional)")
+        f2 = QFormLayout(g2)
         f2.setSpacing(8)
         f2.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        self.nok2_name   = self._field("Full name")
-        self.nok2_rel    = self._field("e.g. Wife, Son")
-        self.nok2_addr   = self._field("Address")
-        self.nok2_phone  = self._field("Phone number")
+        self.nok2_name  = self._field("Full name")
+        self.nok2_rel   = self._field("e.g. Wife, Son")
+        self.nok2_addr  = self._field("Address")
+        self.nok2_phone = self._field("Phone number")
         f2.addRow("Name:",         self.nok2_name)
         f2.addRow("Relationship:", self.nok2_rel)
         f2.addRow("Address:",      self.nok2_addr)
@@ -520,7 +601,7 @@ class MemberDialog(QDialog):
 
 
 # ---------------------------------------------------------------------------
-# Member view dialog (read-only)
+# Member view dialog (read-only + financial summary)
 # ---------------------------------------------------------------------------
 
 class MemberViewDialog(QDialog):
@@ -533,7 +614,7 @@ class MemberViewDialog(QDialog):
         ]))
         self.setWindowTitle(f"Member — {full_name}")
         self.setMinimumWidth(560)
-        self.setMinimumHeight(500)
+        self.setMinimumHeight(520)
         self._setup_ui()
 
     def _setup_ui(self):
@@ -544,30 +625,36 @@ class MemberViewDialog(QDialog):
         m    = self.member
         tabs = QTabWidget()
 
-        # Personal tab
+        # Personal
         personal = QWidget()
-        pf       = QFormLayout(personal)
+        pf = QFormLayout(personal)
         pf.setContentsMargins(12, 12, 12, 12)
         pf.setSpacing(10)
         pf.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        stations = {s['station_id']: s['station_name']
-                    for s in self.db.get_all_stations(enabled_only=False)}
+        stations  = {s['station_id']: s['station_name']
+                     for s in self.db.get_all_stations(enabled_only=False)}
         full_name = ' '.join(filter(None, [
             m['first_name'], m.get('middle_name'), m['last_name']
         ]))
 
+        if m['is_deceased']:
+            status = "Deceased"
+        elif not m['is_active']:
+            status = "Inactive"
+        else:
+            status = "Active"
+
         for label, val in [
-            ("Member ID:",    m['member_id']),
-            ("Full Name:",    full_name),
-            ("Gender:",       m['gender']),
-            ("Station:",      stations.get(m['station_id'], m['station_id'])),
-            ("Date Joined:",  m['date_joined']),
+            ("Member ID:",     m['member_id']),
+            ("Full Name:",     full_name),
+            ("Gender:",        m['gender'] or "—"),
+            ("Station:",       stations.get(m['station_id'], m['station_id'])),
+            ("Date Joined:",   m['date_joined'] or "—"),
             ("Date of Birth:", m['date_of_birth'] or "—"),
-            ("Employee ID:",  m['employee_id'] or "—"),
-            ("Grade Level:",  m['grade_level'] or "—"),
-            ("Status:",       "Deceased" if m['is_deceased'] else
-                              "Active" if m['is_active'] else "Inactive"),
+            ("Employee ID:",   m['employee_id'] or "—"),
+            ("Grade Level:",   m['grade_level'] or "—"),
+            ("Status:",        status),
         ]:
             lbl = QLabel(val or "—")
             lbl.setWordWrap(True)
@@ -575,9 +662,9 @@ class MemberViewDialog(QDialog):
 
         tabs.addTab(personal, "Personal")
 
-        # Contact tab
+        # Contact
         contact = QWidget()
-        cf      = QFormLayout(contact)
+        cf = QFormLayout(contact)
         cf.setContentsMargins(12, 12, 12, 12)
         cf.setSpacing(10)
         cf.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
@@ -589,9 +676,9 @@ class MemberViewDialog(QDialog):
             cf.addRow(label, QLabel(val))
         tabs.addTab(contact, "Contact")
 
-        # NOK tab
-        nok = QWidget()
-        nf  = QVBoxLayout(nok)
+        # NOK
+        nok    = QWidget()
+        nf     = QVBoxLayout(nok)
         nf.setContentsMargins(12, 12, 12, 12)
         nf.setSpacing(12)
         for title, fields in [
@@ -618,23 +705,23 @@ class MemberViewDialog(QDialog):
         nf.addStretch()
         tabs.addTab(nok, "Next of Kin")
 
-        # Financial summary tab
+        # Financial Summary
         summary_tab = QWidget()
-        sf          = QFormLayout(summary_tab)
+        sf = QFormLayout(summary_tab)
         sf.setContentsMargins(12, 12, 12, 12)
         sf.setSpacing(10)
         sf.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         summaries = self.db.get_member_summary(m['member_id'])
         if summaries:
-            s = summaries[0]
+            s        = summaries[0]
             currency = self.db.get_setting('currency_symbol') or '₦'
             for label, val in [
-                ("Total Savings:",          f"{currency}{s['total_savings']:,.2f}"),
-                ("Premium Savings:",        f"{currency}{s['premium_savings']:,.2f}"),
-                ("Fixed/Target Deposits:",  f"{currency}{s['fixed_target_deposits']:,.2f}"),
-                ("Shares:",                 f"{currency}{s['shares_investment']:,.2f}"),
-                ("Loans Outstanding:",      f"{currency}{s['total_loans_outstanding']:,.2f}"),
-                ("Net Balance:",            f"{currency}{s['net_balance']:,.2f}"),
+                ("Total Savings:",         f"{currency}{s['total_savings']:,.2f}"),
+                ("Premium Savings:",       f"{currency}{s['premium_savings']:,.2f}"),
+                ("Fixed/Target Deposits:", f"{currency}{s['fixed_target_deposits']:,.2f}"),
+                ("Shares:",                f"{currency}{s['shares_investment']:,.2f}"),
+                ("Loans Outstanding:",     f"{currency}{s['total_loans_outstanding']:,.2f}"),
+                ("Net Balance:",           f"{currency}{s['net_balance']:,.2f}"),
             ]:
                 lbl = QLabel(val)
                 lbl.setFont(QFont("Segoe UI", 10, QFont.Weight.DemiBold))

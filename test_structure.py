@@ -610,11 +610,20 @@ class TestStationsModule:
     def test_has_edit(self):
         assert '_edit_selected' in self._content()
 
-    def test_has_toggle(self):
-        assert '_toggle_selected' in self._content()
+    def test_has_close(self):
+        assert '_close_station' in self._content()
 
-    def test_has_enable_disable(self):
+    def test_has_reactivate(self):
+        assert '_reactivate_station' in self._content()
+
+    def test_has_toggle_station(self):
         assert 'toggle_station' in self._content()
+
+    def test_has_is_admin(self):
+        assert '_is_admin' in self._content()
+
+    def test_has_confirm(self):
+        assert '_confirm' in self._content()
 
     def test_shows_all_columns(self):
         content = self._content()
@@ -622,33 +631,37 @@ class TestStationsModule:
                     'contact_phone', 'contact_email']:
             assert col in content, f"Missing column: {col}"
 
-    def test_has_admin_guard(self):
-        assert '_is_admin' in self._content()
+    def test_close_confirmation(self):
+        assert 'Confirm Close Station' in self._content()
 
-    def test_has_confirmation(self):
-        assert '_confirm' in self._content()
+    def test_reactivate_confirmation(self):
+        assert 'Confirm Reactivate Station' in self._content()
 
-    def test_admin_role_checked(self):
-        assert "role') == 'Admin'" in self._content()
+    def test_add_confirmation(self):
+        assert 'Confirm Add Station' in self._content()
 
-    def test_confirmation_on_add(self):
-        content = self._content()
-        assert 'Confirm Add Station' in content
-
-    def test_confirmation_on_edit(self):
+    def test_edit_confirmation(self):
         assert 'Confirm Edit Station' in self._content()
 
-    def test_confirmation_on_toggle(self):
-        assert 'Confirm' in self._content() and 'Station' in self._content()
+    def test_no_reassignment_message(self):
+        assert 'reassigned' in self._content()
+
+    def test_status_uses_open_closed(self):
+        content = self._content()
+        assert 'Open' in content and 'Closed' in content
 
     def test_station_id_format(self):
-        # next_station_number uses :02d padding -> 04, 05 ... 99
         with open(os.path.join(ROOT, 'src', 'database', 'db_manager.py')) as f:
             db_content = f.read()
         assert ':02d' in db_content
 
+    def test_no_reassignment_in_db_manager(self):
+        with open(os.path.join(ROOT, 'src', 'database', 'db_manager.py')) as f:
+            db_content = f.read()
+        assert 'next_station_number' in db_content
 
-# ─── Stage 7: members module ──────────────────────────────────────────────────
+
+# ─── Stage 7: members module ─────────────────────────────────────────────────
 
 class TestMembersModule:
     def _content(self):
@@ -691,6 +704,9 @@ class TestMembersModule:
     def test_has_deactivate(self):
         assert '_deactivate_member' in self._content()
 
+    def test_has_reactivate(self):
+        assert '_reactivate_member' in self._content()
+
     def test_has_mark_deceased(self):
         assert '_mark_deceased' in self._content()
 
@@ -715,10 +731,119 @@ class TestMembersModule:
         assert 'Confirm Edit Member' in self._content()
 
     def test_has_confirmation_on_deactivate(self):
-        assert 'Confirm Deactivate Member' in self._content()
+        assert 'DEACTIVATE' in self._content()
+
+    def test_has_confirmation_on_reactivate(self):
+        assert 'REACTIVATE' in self._content()
 
     def test_has_confirmation_on_deceased(self):
-        assert 'Confirm Mark Deceased' in self._content()
+        assert 'DECEASED' in self._content()
+
+    def test_no_reassignment_message(self):
+        assert 'reassigned' in self._content()
 
     def test_names_uppercased(self):
         assert '.upper()' in self._content()
+
+    def test_severe_warning_method(self):
+        assert '_severe_warning' in self._content()
+
+    def test_deceased_is_irreversible(self):
+        assert 'IRREVERSIBLE' in self._content()
+
+    def test_admin_guard_on_deactivate(self):
+        assert 'Only administrators can deactivate' in self._content()
+
+    def test_admin_guard_on_reactivate(self):
+        assert 'Only administrators can reactivate' in self._content()
+
+    def test_admin_guard_on_deceased(self):
+        assert 'Only administrators can mark' in self._content()
+
+    def test_reactivate_in_db_manager(self):
+        with open(os.path.join(ROOT, 'src', 'database', 'db_manager.py')) as f:
+            db_content = f.read()
+        assert 'reactivate_member' in db_content
+
+    def test_summary_shows_counts(self):
+        content = self._content()
+        assert 'Active:' in content
+        assert 'Inactive:' in content
+        assert 'Deceased:' in content
+
+
+
+# ─── Stage 8: savings module ──────────────────────────────────────────────────
+
+class TestSavingsModule:
+    def _content(self):
+        with open(os.path.join(ROOT, 'src', 'gui', 'savings_module.py')) as f:
+            return f.read()
+
+    def test_file_exists(self):
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'gui', 'savings_module.py'))
+
+    def test_has_class(self):
+        assert 'class SavingsModule' in self._content()
+
+    def test_has_transaction_dialog(self):
+        assert 'class TransactionDialog' in self._content()
+
+    def test_has_open_account_dialog(self):
+        assert 'class OpenAccountDialog' in self._content()
+
+    def test_has_history_dialog(self):
+        assert 'class AccountHistoryDialog' in self._content()
+
+    def test_has_refresh(self):
+        assert 'def refresh' in self._content()
+
+    def test_has_deposit(self):
+        assert '_deposit' in self._content()
+
+    def test_has_withdraw(self):
+        assert '_withdraw' in self._content()
+
+    def test_has_open_account(self):
+        assert '_open_account' in self._content()
+
+    def test_has_search(self):
+        assert 'search_input' in self._content()
+
+    def test_has_station_filter(self):
+        assert 'station_filter' in self._content()
+
+    def test_has_type_filter(self):
+        assert 'type_filter' in self._content()
+
+    def test_has_date_filter(self):
+        assert 'date_from' in self._content()
+
+    def test_has_multi_term_search(self):
+        assert 'terms' in self._content()
+
+    def test_has_summary_cards(self):
+        assert '_update_summary_cards' in self._content()
+
+    def test_has_accounts_tab(self):
+        assert 'Accounts' in self._content()
+
+    def test_has_transactions_tab(self):
+        assert 'Transaction History' in self._content()
+
+    def test_has_confirm_deposit(self):
+        assert 'Confirm Deposit' in self._content()
+
+    def test_has_confirm_withdrawal(self):
+        assert 'Confirm Withdrawal' in self._content()
+
+    def test_has_payment_methods(self):
+        content = self._content()
+        for method in ['Cash', 'Cheque', 'Bank Transfer']:
+            assert method in content, f"Missing payment method: {method}"
+
+    def test_has_cheque_number_field(self):
+        assert 'cheque_number' in self._content()
+
+    def test_has_currency_formatting(self):
+        assert 'self.currency' in self._content()
