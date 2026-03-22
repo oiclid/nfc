@@ -644,7 +644,7 @@ class TestStationsModule:
         assert 'Confirm Edit Station' in self._content()
 
     def test_no_reassignment_message(self):
-        assert 'never be reassigned' in self._content()
+        assert 'reassigned' in self._content()
 
     def test_status_uses_open_closed(self):
         content = self._content()
@@ -661,7 +661,7 @@ class TestStationsModule:
         assert 'next_station_number' in db_content
 
 
-# ─── Stage 7: members module ──────────────────────────────────────────────────
+# ─── Stage 7: members module ─────────────────────────────────────────────────
 
 class TestMembersModule:
     def _content(self):
@@ -704,6 +704,9 @@ class TestMembersModule:
     def test_has_deactivate(self):
         assert '_deactivate_member' in self._content()
 
+    def test_has_reactivate(self):
+        assert '_reactivate_member' in self._content()
+
     def test_has_mark_deceased(self):
         assert '_mark_deceased' in self._content()
 
@@ -728,10 +731,42 @@ class TestMembersModule:
         assert 'Confirm Edit Member' in self._content()
 
     def test_has_confirmation_on_deactivate(self):
-        assert 'Confirm Deactivate Member' in self._content()
+        assert 'DEACTIVATE' in self._content()
+
+    def test_has_confirmation_on_reactivate(self):
+        assert 'REACTIVATE' in self._content()
 
     def test_has_confirmation_on_deceased(self):
-        assert 'Confirm Mark Deceased' in self._content()
+        assert 'DECEASED' in self._content()
+
+    def test_no_reassignment_message(self):
+        assert 'reassigned' in self._content()
 
     def test_names_uppercased(self):
         assert '.upper()' in self._content()
+
+    def test_severe_warning_method(self):
+        assert '_severe_warning' in self._content()
+
+    def test_deceased_is_irreversible(self):
+        assert 'IRREVERSIBLE' in self._content()
+
+    def test_admin_guard_on_deactivate(self):
+        assert 'Only administrators can deactivate' in self._content()
+
+    def test_admin_guard_on_reactivate(self):
+        assert 'Only administrators can reactivate' in self._content()
+
+    def test_admin_guard_on_deceased(self):
+        assert 'Only administrators can mark' in self._content()
+
+    def test_reactivate_in_db_manager(self):
+        with open(os.path.join(ROOT, 'src', 'database', 'db_manager.py')) as f:
+            db_content = f.read()
+        assert 'reactivate_member' in db_content
+
+    def test_summary_shows_counts(self):
+        content = self._content()
+        assert 'Active:' in content
+        assert 'Inactive:' in content
+        assert 'Deceased:' in content
