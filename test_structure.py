@@ -847,3 +847,84 @@ class TestSavingsModule:
 
     def test_has_currency_formatting(self):
         assert 'self.currency' in self._content()
+
+
+# ─── Stage 9: loans module ────────────────────────────────────────────────────
+
+class TestLoansModule:
+    def _content(self):
+        with open(os.path.join(ROOT, 'src', 'gui', 'loans_module.py')) as f:
+            return f.read()
+
+    def test_file_exists(self):
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'gui', 'loans_module.py'))
+
+    def test_has_class(self):
+        assert 'class LoansModule' in self._content()
+
+    def test_has_repayment_dialog(self):
+        assert 'class RepaymentDialog' in self._content()
+
+    def test_has_loan_detail_dialog(self):
+        assert 'class LoanDetailDialog' in self._content()
+
+    def test_has_refresh(self):
+        assert 'def refresh' in self._content()
+
+    def test_has_disburse(self):
+        assert '_disburse' in self._content()
+
+    def test_has_record_repayment(self):
+        assert '_record_repayment' in self._content()
+
+    def test_has_view_loan(self):
+        assert '_view_loan' in self._content()
+
+    def test_has_search(self):
+        assert 'search_input' in self._content()
+
+    def test_has_station_filter(self):
+        assert 'station_filter' in self._content()
+
+    def test_has_type_filter(self):
+        assert 'type_filter' in self._content()
+
+    def test_has_status_filter(self):
+        assert 'status_filter' in self._content()
+
+    def test_has_date_filter(self):
+        assert 'rep_date_from' in self._content()
+
+    def test_has_multi_term_search(self):
+        assert 'terms' in self._content()
+
+    def test_has_loan_preview(self):
+        assert 'prev_interest' in self._content()
+
+    def test_has_summary_cards(self):
+        assert '_update_summary_cards' in self._content()
+
+    def test_has_all_tabs(self):
+        content = self._content()
+        for tab in ['All Loans', 'Repayment History', 'Disburse Loan']:
+            assert tab in content, f"Missing tab: {tab}"
+
+    def test_has_loan_types(self):
+        assert 'get_loan_types' in self._content()
+
+    def test_has_confirm_repayment(self):
+        assert 'Confirm Repayment' in self._content()
+
+    def test_has_confirm_disburse(self):
+        assert 'Confirm Loan Disbursement' in self._content()
+
+    def test_has_payment_methods(self):
+        content = self._content()
+        for method in ['Cash', 'Cheque', 'Bank Transfer']:
+            assert method in content
+
+    def test_inactive_member_blocked(self):
+        assert 'inactive or deceased' in self._content()
+
+    def test_has_end_date_calculation(self):
+        assert 'relativedelta' in self._content()
