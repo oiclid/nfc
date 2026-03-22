@@ -1,0 +1,16 @@
+Migration started: 2026-03-21 23:29:45
+Source: /home/oiclid/code/nfc/data/database.sld
+Target: /home/oiclid/code/nfc/data/nfc_cooperative.db
+
+Settings:   10 inserted
+Savings types: 4 inserted
+Loan types: 8 inserted
+Stations:   3/3 migrated
+Members:    327/327 migrated, 0 skipped
+Savings accounts: 433 created, 1 skipped
+Loans:      8451/8451 migrated, 0 skipped
+Users:      3/3 migrated
+Bank txns:  6/6 migrated
+
+Migration complete.
+Finished: 2026-03-21 23:29:54
