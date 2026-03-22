@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QCheckBox
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QColor
 
 
 class StationsModule(QWidget):
@@ -26,7 +26,6 @@ class StationsModule(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(16)
 
-        # Header
         hdr = QHBoxLayout()
         title = QLabel("Stations")
         title.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
@@ -47,11 +46,10 @@ class StationsModule(QWidget):
         hdr.addWidget(refresh_btn)
         layout.addLayout(hdr)
 
-        self.show_all_cb = QCheckBox("Show disabled stations")
-        self.show_all_cb.stateChanged.connect(self.refresh)
-        layout.addWidget(self.show_all_cb)
+        self.show_closed_cb = QCheckBox("Show closed stations")
+        self.show_closed_cb.stateChanged.connect(self.refresh)
+        layout.addWidget(self.show_closed_cb)
 
-        # Table
         self.table = QTableWidget()
         self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels([
@@ -63,24 +61,32 @@ class StationsModule(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setStretchLastSection(True)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.doubleClicked.connect(self._edit_selected)
         layout.addWidget(self.table)
 
         if self._is_admin():
             btn_row = QHBoxLayout()
+
             self.edit_btn = QPushButton("Edit")
             self.edit_btn.setFixedHeight(34)
             self.edit_btn.setEnabled(False)
             self.edit_btn.clicked.connect(self._edit_selected)
             btn_row.addWidget(self.edit_btn)
 
-            self.toggle_btn = QPushButton("Enable / Disable")
-            self.toggle_btn.setFixedHeight(34)
-            self.toggle_btn.setEnabled(False)
-            self.toggle_btn.clicked.connect(self._toggle_selected)
-            btn_row.addWidget(self.toggle_btn)
+            self.close_btn = QPushButton("Close Station")
+            self.close_btn.setFixedHeight(34)
+            self.close_btn.setEnabled(False)
+            self.close_btn.clicked.connect(self._close_station)
+            self.close_btn.setStyleSheet("QPushButton:enabled { color: #E74C3C; }")
+            btn_row.addWidget(self.close_btn)
+
+            self.reactivate_btn = QPushButton("Reactivate Station")
+            self.reactivate_btn.setFixedHeight(34)
+            self.reactivate_btn.setEnabled(False)
+            self.reactivate_btn.clicked.connect(self._reactivate_station)
+            self.reactivate_btn.setStyleSheet("QPushButton:enabled { color: #27AE60; }")
+            btn_row.addWidget(self.reactivate_btn)
 
             btn_row.addStretch()
             layout.addLayout(btn_row)
@@ -113,17 +119,26 @@ class StationsModule(QWidget):
         return item.data(Qt.ItemDataRole.UserRole) if item else None
 
     def _on_selection(self):
-        has = self._selected_station_id() is not None
+        sid = self._selected_station_id()
+        has = sid is not None
         self.edit_btn.setEnabled(has)
-        self.toggle_btn.setEnabled(has)
+
+        if has:
+            station = self.db.get_station(sid)
+            is_open = station and station['enabled']
+            self.close_btn.setEnabled(bool(is_open))
+            self.reactivate_btn.setEnabled(not bool(is_open) if station else False)
+        else:
+            self.close_btn.setEnabled(False)
+            self.reactivate_btn.setEnabled(False)
 
     # -------------------------------------------------------------------------
     # Data
     # -------------------------------------------------------------------------
 
     def refresh(self):
-        show_all = self.show_all_cb.isChecked()
-        stations = self.db.get_all_stations(enabled_only=not show_all)
+        show_closed = self.show_closed_cb.isChecked()
+        stations    = self.db.get_all_stations(enabled_only=not show_closed)
         self.table.setRowCount(len(stations))
 
         for row, s in enumerate(stations):
@@ -132,20 +147,21 @@ class StationsModule(QWidget):
                 item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
                 return item
 
-            self.table.setItem(row, 0, cell(s['station_id']))
+            id_item = cell(s['station_id'])
+            id_item.setData(Qt.ItemDataRole.UserRole, s['station_id'])
+            self.table.setItem(row, 0, id_item)
             self.table.setItem(row, 1, cell(s['station_name']))
             self.table.setItem(row, 2, cell(s['address']))
             self.table.setItem(row, 3, cell(s['contact_person']))
             self.table.setItem(row, 4, cell(s['contact_phone']))
             self.table.setItem(row, 5, cell(s['contact_email']))
 
-            status      = "Enabled" if s['enabled'] else "Disabled"
+            status      = "Open" if s['enabled'] else "Closed"
             status_item = QTableWidgetItem(status)
             status_item.setForeground(
-                Qt.GlobalColor.green if s['enabled'] else Qt.GlobalColor.red
+                QColor("#27AE60") if s['enabled'] else QColor("#E74C3C")
             )
             self.table.setItem(row, 6, status_item)
-            self.table.item(row, 0).setData(Qt.ItemDataRole.UserRole, s['station_id'])
 
         self.table.resizeColumnsToContents()
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -162,11 +178,14 @@ class StationsModule(QWidget):
             address = dlg.address_input.text().strip()
             if not self._confirm(
                 "Confirm Add Station",
-                f"Add new station 'NFC - {city}'?"
+                f"Add new station 'NFC - {city}'?\n\n"
+                "Note: Station IDs are permanent and never reassigned."
             ):
                 return
             try:
-                self.db.add_station(city, address)
+                sid = self.db.add_station(city, address)
+                QMessageBox.information(self, "Station Added",
+                                        f"Station 'NFC - {city}' added successfully.\nID: {sid}")
                 self.refresh()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to add station:\n{e}")
@@ -198,24 +217,44 @@ class StationsModule(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to update station:\n{e}")
 
-    def _toggle_selected(self):
+    def _close_station(self):
         sid = self._selected_station_id()
         if not sid:
             return
         station = self.db.get_station(sid)
-        if not station:
+        if not station or not station['enabled']:
             return
-        action = "disable" if station['enabled'] else "enable"
         if not self._confirm(
-            "Confirm",
-            f"Are you sure you want to {action} station '{station['station_name']}'?"
+            "Confirm Close Station",
+            f"Close station '{station['station_name']}'?\n\n"
+            "The station will be hidden from operations but its ID is\n"
+            "retained permanently and will never be reassigned.\n\n"
+            "You can reactivate it at any time."
         ):
             return
         try:
-            self.db.toggle_station(sid, not station['enabled'])
+            self.db.toggle_station(sid, False)
             self.refresh()
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to update station:\n{e}")
+            QMessageBox.critical(self, "Error", f"Failed to close station:\n{e}")
+
+    def _reactivate_station(self):
+        sid = self._selected_station_id()
+        if not sid:
+            return
+        station = self.db.get_station(sid)
+        if not station or station['enabled']:
+            return
+        if not self._confirm(
+            "Confirm Reactivate Station",
+            f"Reactivate station '{station['station_name']}'?"
+        ):
+            return
+        try:
+            self.db.toggle_station(sid, True)
+            self.refresh()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to reactivate station:\n{e}")
 
 
 # ---------------------------------------------------------------------------
