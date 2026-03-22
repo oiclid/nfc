@@ -200,36 +200,32 @@ class MainWindow(QMainWindow):
     # -------------------------------------------------------------------------
 
     def _load_modules(self):
-        from gui.dashboard_module    import DashboardModule
-        from gui.stations_module     import StationsModule
-        from gui.members_module      import MembersModule
-        from gui.savings_module      import SavingsModule
-        from gui.loans_module        import LoansModule
-        from gui.transactions_module import TransactionsModule
-        from gui.reports_module      import ReportsModule
-        from gui.settings_module     import SettingsModule
-
         u = self.current_user
-        slot_map = {
-            0: DashboardModule,
-            1: StationsModule     if u['can_maintain']     else None,
-            2: MembersModule      if u['can_maintain']     else None,
-            3: SavingsModule      if u['can_operate']      else None,
-            4: LoansModule        if u['can_operate']      else None,
-            5: TransactionsModule if u['can_operate']      else None,
-            6: ReportsModule      if u['can_view_reports'] else None,
-            7: SettingsModule     if u['can_maintain']     else None,
-        }
 
-        for slot in sorted(slot_map):
-            cls = slot_map[slot]
-            if cls is None:
-                continue
+        def _try_load(module_path, class_name, slot):
             try:
-                widget = cls(self.app, self)
+                import importlib
+                mod = importlib.import_module(module_path)
+                cls = getattr(mod, class_name)
+                return cls(self.app, self)
             except Exception:
-                # module is still a stub — show a placeholder
-                widget = self._placeholder(slot)
+                return self._placeholder(slot)
+
+        slot_defs = [
+            (0, 'gui.dashboard_module',    'DashboardModule',    True),
+            (1, 'gui.stations_module',     'StationsModule',     u['can_maintain']),
+            (2, 'gui.members_module',      'MembersModule',      u['can_maintain']),
+            (3, 'gui.savings_module',      'SavingsModule',      u['can_operate']),
+            (4, 'gui.loans_module',        'LoansModule',        u['can_operate']),
+            (5, 'gui.transactions_module', 'TransactionsModule', u['can_operate']),
+            (6, 'gui.reports_module',      'ReportsModule',      u['can_view_reports']),
+            (7, 'gui.settings_module',     'SettingsModule',     u['can_maintain']),
+        ]
+
+        for slot, module_path, class_name, allowed in slot_defs:
+            if not allowed:
+                continue
+            widget = _try_load(module_path, class_name, slot)
             self.stack.addWidget(widget)
             self._modules.append((slot, widget))
 

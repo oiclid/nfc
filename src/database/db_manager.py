@@ -286,7 +286,12 @@ class DatabaseManager:
             "SELECT type_code FROM savings_types WHERE savings_type_id=?",
             (savings_type_id,)
         )
-        account_number = f"{member_id}-{stype['type_code'][:4].upper()}"
+        base   = f"{member_id}-{stype['type_code'][:4].upper()}"
+        # ensure uniqueness — account may already exist from migration
+        existing = self.fetchone(
+            "SELECT account_number FROM savings_accounts WHERE account_number=?", (base,)
+        )
+        account_number = base if not existing else f"{base}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
         cursor = self.execute(
             "INSERT INTO savings_accounts (member_id,savings_type_id,account_number) VALUES (?,?,?)",
             (member_id, savings_type_id, account_number)
