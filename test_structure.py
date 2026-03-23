@@ -1277,3 +1277,110 @@ class TestHistoricalTransactionMigration:
         ).fetchone()[0]
         conn.close()
         assert nulldates == 0
+
+
+# ─── Stage 13: dashboard + settings ──────────────────────────────────────────
+
+class TestDashboardModule:
+    def _content(self):
+        with open(os.path.join(ROOT, 'src', 'gui', 'dashboard_module.py')) as f:
+            return f.read()
+
+    def test_file_exists(self):
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'gui', 'dashboard_module.py'))
+
+    def test_has_class(self):
+        assert 'class DashboardModule' in self._content()
+
+    def test_has_refresh(self):
+        assert 'def refresh' in self._content()
+
+    def test_has_summary_cards(self):
+        assert '_load_cards' in self._content()
+
+    def test_has_recent_transactions(self):
+        assert '_load_recent_transactions' in self._content()
+
+    def test_has_members_by_station(self):
+        assert '_load_members_by_station' in self._content()
+
+    def test_has_savings_by_type(self):
+        assert '_load_savings_by_type' in self._content()
+
+    def test_has_quick_actions(self):
+        assert '_load_quick_actions' in self._content()
+
+    def test_has_navigation(self):
+        assert '_navigate' in self._content()
+
+    def test_cards_are_clickable(self):
+        assert 'switch_to' in self._content()
+
+
+class TestSettingsModule:
+    def _content(self):
+        with open(os.path.join(ROOT, 'src', 'gui', 'settings_module.py')) as f:
+            return f.read()
+
+    def test_file_exists(self):
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'gui', 'settings_module.py'))
+
+    def test_has_class(self):
+        assert 'class SettingsModule' in self._content()
+
+    def test_has_user_dialog(self):
+        assert 'class UserDialog' in self._content()
+
+    def test_has_change_password_dialog(self):
+        assert 'class ChangePasswordDialog' in self._content()
+
+    def test_has_savings_type_dialog(self):
+        assert 'class SavingsTypeDialog' in self._content()
+
+    def test_has_loan_type_dialog(self):
+        assert 'class LoanTypeDialog' in self._content()
+
+    def test_has_all_tabs(self):
+        content = self._content()
+        for tab in ['System', 'Users', 'Savings Types', 'Loan Types']:
+            assert tab in content, f"Missing tab: {tab}"
+
+    def test_has_system_settings(self):
+        assert '_save_system_settings' in self._content()
+
+    def test_has_user_management(self):
+        content = self._content()
+        assert '_add_user' in content
+        assert '_edit_user' in content
+        assert '_deactivate_user' in content
+        assert '_change_password' in content
+
+    def test_has_savings_type_management(self):
+        content = self._content()
+        assert '_add_savings_type' in content
+        assert '_edit_savings_type' in content
+        assert '_toggle_savings_type' in content
+
+    def test_has_loan_type_management(self):
+        content = self._content()
+        assert '_add_loan_type' in content
+        assert '_edit_loan_type' in content
+        assert '_toggle_loan_type' in content
+
+    def test_blocks_deactivate_self(self):
+        assert "user['username'] != self.user['username']" in self._content()
+
+    def test_blocks_deactivate_type_with_active_accounts(self):
+        assert 'active accounts use this type' in self._content()
+
+    def test_blocks_deactivate_loan_type_with_active_loans(self):
+        assert 'active loans use this type' in self._content()
+
+    def test_password_min_length(self):
+        assert 'len(self.password_input.text()) < 6' in self._content()
+
+    def test_password_confirm_match(self):
+        assert 'Passwords do not match' in self._content()
+
+    def test_default_perms_by_role(self):
+        assert '_set_default_perms' in self._content()
