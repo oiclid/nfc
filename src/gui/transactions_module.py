@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox,
     QDialog, QFormLayout, QLineEdit, QDialogButtonBox, QGroupBox,
-    QComboBox, QDateEdit, QDoubleSpinBox, QTextEdit, QCheckBox
+    QComboBox, QDateEdit, QDoubleSpinBox, QTextEdit, QCheckBox, QTabWidget
 )
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QFont, QColor
@@ -45,7 +45,6 @@ class TransactionsModule(QWidget):
         self.summary_row.setSpacing(12)
         layout.addLayout(self.summary_row)
 
-        from PyQt6.QtWidgets import QTabWidget
         self.tabs = QTabWidget()
         self.tabs.addTab(self._all_transactions_tab(), "All Transactions")
         self.tabs.addTab(self._bank_transactions_tab(), "Bank Transactions")
