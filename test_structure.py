@@ -928,3 +928,76 @@ class TestLoansModule:
 
     def test_has_end_date_calculation(self):
         assert 'relativedelta' in self._content()
+
+
+# ─── Stage 10: transactions module ───────────────────────────────────────────
+
+class TestTransactionsModule:
+    def _content(self):
+        with open(os.path.join(ROOT, 'src', 'gui', 'transactions_module.py')) as f:
+            return f.read()
+
+    def test_file_exists(self):
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'gui', 'transactions_module.py'))
+
+    def test_has_class(self):
+        assert 'class TransactionsModule' in self._content()
+
+    def test_has_detail_dialog(self):
+        assert 'class TransactionDetailDialog' in self._content()
+
+    def test_has_bank_dialog(self):
+        assert 'class BankTransactionDialog' in self._content()
+
+    def test_has_refresh(self):
+        assert 'def refresh' in self._content()
+
+    def test_has_search(self):
+        assert 'search_input' in self._content()
+
+    def test_has_station_filter(self):
+        assert 'station_filter' in self._content()
+
+    def test_has_type_filter(self):
+        assert 'type_filter' in self._content()
+
+    def test_has_date_filter(self):
+        assert 'date_from' in self._content()
+
+    def test_has_credits_debits_filter(self):
+        content = self._content()
+        assert 'credits_only' in content
+        assert 'debits_only' in content
+
+    def test_has_multi_term_search(self):
+        assert 'terms' in self._content()
+
+    def test_has_all_transactions_tab(self):
+        assert 'All Transactions' in self._content()
+
+    def test_has_bank_transactions_tab(self):
+        assert 'Bank Transactions' in self._content()
+
+    def test_has_summary_cards(self):
+        assert '_update_summary_cards' in self._content()
+
+    def test_has_add_bank_transaction(self):
+        assert '_add_bank_transaction' in self._content()
+
+    def test_has_mark_cleared(self):
+        assert '_mark_cleared' in self._content()
+
+    def test_has_view_transaction(self):
+        assert '_view_transaction' in self._content()
+
+    def test_transactions_are_immutable(self):
+        assert 'cannot be modified' in self._content()
+
+    def test_has_confirm_bank_transaction(self):
+        assert 'Confirm Bank Transaction' in self._content()
+
+    def test_admin_only_add_bank(self):
+        assert "role') == 'Admin'" in self._content()
+
+    def test_has_cleared_filter(self):
+        assert 'Cleared' in self._content()
