@@ -103,7 +103,7 @@ class TransactionsModule(QWidget):
         self.date_from = QDateEdit()
         self.date_from.setFixedHeight(36)
         self.date_from.setCalendarPopup(True)
-        self.date_from.setDate(QDate.currentDate().addMonths(-1))
+        self.date_from.setDate(QDate(2010, 1, 1))
         self.date_from.setDisplayFormat("dd/MM/yyyy")
         self.date_from.dateChanged.connect(self._load_transactions)
         date_row.addWidget(QLabel("From:"))
@@ -160,6 +160,17 @@ class TransactionsModule(QWidget):
         self.txn_summary = QLabel()
         self.txn_summary.setStyleSheet("color: #7F8C8D;")
         layout.addWidget(self.txn_summary)
+
+        self.txn_empty_lbl = QLabel(
+            "No transactions found.\n\n"
+            "Transactions are recorded automatically when you make deposits, "
+            "withdrawals, or loan disbursements through the Savings and Loans modules."
+        )
+        self.txn_empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.txn_empty_lbl.setWordWrap(True)
+        self.txn_empty_lbl.setStyleSheet("color: #7F8C8D; font-size: 11pt;")
+        self.txn_empty_lbl.setVisible(False)
+        layout.addWidget(self.txn_empty_lbl)
 
         return w
 
@@ -256,7 +267,7 @@ class TransactionsModule(QWidget):
     # -------------------------------------------------------------------------
 
     def _fmt(self, amount) -> str:
-        return f"{self.currency}{float(amount):,.2f}"
+        return f"{self.currency}{float(amount or 0):,.2f}"
 
     def _confirm(self, title: str, message: str) -> bool:
         reply = QMessageBox.question(
@@ -409,6 +420,8 @@ class TransactionsModule(QWidget):
 
         self.txn_table.resizeColumnsToContents()
         self.txn_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.txn_empty_lbl.setVisible(len(txns) == 0)
+        self.txn_table.setVisible(len(txns) > 0)
         self.txn_summary.setText(
             f"{len(txns)} transaction(s)  —  "
             f"Credits: {self._fmt(total_credits)}  |  "

@@ -1001,3 +1001,279 @@ class TestTransactionsModule:
 
     def test_has_cleared_filter(self):
         assert 'Cleared' in self._content()
+
+
+# ─── Stage 11: reports engine ─────────────────────────────────────────────────
+
+class TestReportGenerator:
+    def _content(self):
+        with open(os.path.join(ROOT, 'src', 'reports', 'report_generator.py')) as f:
+            return f.read()
+
+    def test_file_exists(self):
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'reports', 'report_generator.py'))
+
+    def test_has_class(self):
+        assert 'class ReportGenerator' in self._content()
+
+    def test_has_members_list_pdf(self):
+        assert 'def members_list_pdf' in self._content()
+
+    def test_has_members_list_excel(self):
+        assert 'def members_list_excel' in self._content()
+
+    def test_has_savings_summary_pdf(self):
+        assert 'def savings_summary_pdf' in self._content()
+
+    def test_has_savings_summary_excel(self):
+        assert 'def savings_summary_excel' in self._content()
+
+    def test_has_loans_summary_pdf(self):
+        assert 'def loans_summary_pdf' in self._content()
+
+    def test_has_loans_summary_excel(self):
+        assert 'def loans_summary_excel' in self._content()
+
+    def test_has_member_statement_pdf(self):
+        assert 'def member_statement_pdf' in self._content()
+
+    def test_has_transactions_report_pdf(self):
+        assert 'def transactions_report_pdf' in self._content()
+
+    def test_has_transactions_report_excel(self):
+        assert 'def transactions_report_excel' in self._content()
+
+    def test_has_reports_dir(self):
+        assert 'REPORTS_DIR' in self._content()
+
+    def test_has_pdf_header(self):
+        assert '_pdf_header' in self._content()
+
+    def test_has_xl_title(self):
+        assert '_xl_title' in self._content()
+
+    def test_generates_members_pdf(self, tmp_path):
+        import shutil, sys
+        sys.path.insert(0, os.path.join(ROOT, 'src'))
+        from reports.report_generator import ReportGenerator
+        db_dest = str(tmp_path / 'test.db')
+        shutil.copy(os.path.join(ROOT, 'data', 'nfc_cooperative.db'), db_dest)
+
+        rg = ReportGenerator.__new__(ReportGenerator)
+        rg.db_path = db_dest
+        import os as _os
+        report_dir = str(tmp_path / 'reports')
+        _os.makedirs(report_dir, exist_ok=True)
+
+        from reports import report_generator as rg_module
+        orig = rg_module.REPORTS_DIR
+        rg_module.REPORTS_DIR = report_dir
+        rg.__init__(db_dest)
+
+        path = rg.members_list_pdf()
+        rg_module.REPORTS_DIR = orig
+        assert _os.path.isfile(path)
+        assert _os.path.getsize(path) > 1000
+
+    def test_generates_savings_excel(self, tmp_path):
+        import shutil, sys, os as _os
+        sys.path.insert(0, os.path.join(ROOT, 'src'))
+        from reports.report_generator import ReportGenerator
+        from reports import report_generator as rg_module
+        db_dest    = str(tmp_path / 'test.db')
+        report_dir = str(tmp_path / 'reports')
+        shutil.copy(os.path.join(ROOT, 'data', 'nfc_cooperative.db'), db_dest)
+        _os.makedirs(report_dir, exist_ok=True)
+        orig = rg_module.REPORTS_DIR
+        rg_module.REPORTS_DIR = report_dir
+        rg = ReportGenerator(db_dest)
+        path = rg.savings_summary_excel()
+        rg_module.REPORTS_DIR = orig
+        assert _os.path.isfile(path)
+        assert _os.path.getsize(path) > 1000
+
+
+# ─── Stage 12: reports UI ─────────────────────────────────────────────────────
+
+class TestReportsModule:
+    def _content(self):
+        with open(os.path.join(ROOT, 'src', 'gui', 'reports_module.py')) as f:
+            return f.read()
+
+    def test_file_exists(self):
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'gui', 'reports_module.py'))
+
+    def test_has_class(self):
+        assert 'class ReportsModule' in self._content()
+
+    def test_has_report_worker(self):
+        assert 'class ReportWorker' in self._content()
+
+    def test_has_all_tabs(self):
+        content = self._content()
+        for tab in ['Members', 'Savings', 'Loans',
+                    'Member Statement', 'Transactions', 'Generated Reports']:
+            assert tab in content, f"Missing tab: {tab}"
+
+    def test_has_generate_members(self):
+        assert '_generate_members' in self._content()
+
+    def test_has_generate_savings(self):
+        assert '_generate_savings' in self._content()
+
+    def test_has_generate_loans(self):
+        assert '_generate_loans' in self._content()
+
+    def test_has_generate_statement(self):
+        assert '_generate_statement' in self._content()
+
+    def test_has_generate_transactions(self):
+        assert '_generate_transactions' in self._content()
+
+    def test_has_history_tab(self):
+        assert '_load_history' in self._content()
+
+    def test_has_open_file(self):
+        assert '_open_file' in self._content()
+
+    def test_has_delete_report(self):
+        assert '_delete_selected_report' in self._content()
+
+    def test_has_progress_bar(self):
+        assert 'QProgressBar' in self._content()
+
+    def test_runs_in_thread(self):
+        assert 'QThread' in self._content()
+
+    def test_wired_to_generator(self):
+        assert 'ReportGenerator' in self._content()
+
+    def test_has_station_filter(self):
+        assert '_station_combo' in self._content()
+
+    def test_has_format_selector(self):
+        content = self._content()
+        assert 'PDF' in content and 'Excel' in content
+
+    def test_has_member_lookup(self):
+        assert '_lookup_statement_member' in self._content()
+
+    def test_opens_after_generation(self):
+        assert 'Open now?' in self._content()
+
+
+# ─── Fixes: transactions module, main window, historical migration ─────────────
+
+class TestTransactionsFixes:
+    def _content(self):
+        with open(os.path.join(ROOT, 'src', 'gui', 'transactions_module.py')) as f:
+            return f.read()
+
+    def test_qtabwidget_in_top_imports(self):
+        # QTabWidget must be at top level, not imported inside a method
+        lines = self._content().split('\n')
+        import_block_end = next(i for i, l in enumerate(lines) if l.startswith('class '))
+        import_section = '\n'.join(lines[:import_block_end])
+        assert 'QTabWidget' in import_section
+
+    def test_fmt_handles_none(self):
+        # _fmt must use `or 0` to handle None from empty SUM() aggregates
+        assert 'float(amount or 0)' in self._content()
+
+    def test_date_from_starts_2010(self):
+        # default date range starts from 2010 to show historical data
+        assert 'QDate(2010, 1, 1)' in self._content()
+
+    def test_empty_state_label(self):
+        assert 'txn_empty_lbl' in self._content()
+
+    def test_no_debug_prints_in_main_window(self):
+        with open(os.path.join(ROOT, 'src', 'gui', 'main_window.py')) as f:
+            content = f.read()
+        assert 'print(' not in content
+        assert 'traceback.print_exc' not in content
+
+
+class TestHistoricalTransactionMigration:
+    MIGRATION = os.path.join(ROOT, 'migrations', '0003_migrate_historical_transactions.py')
+
+    def _content(self):
+        with open(self.MIGRATION) as f:
+            return f.read()
+
+    def test_migration_file_exists(self):
+        assert os.path.isfile(self.MIGRATION)
+
+    def test_has_up_function(self):
+        assert 'def up(' in self._content()
+
+    def test_has_account_map(self):
+        assert 'ACCOUNT_MAP' in self._content()
+
+    def test_maps_savings_deposit(self):
+        assert 'Savings Deposit' in self._content()
+
+    def test_maps_savings_withdrawal(self):
+        assert 'Savings Withdrawal' in self._content()
+
+    def test_maps_loan_disbursement(self):
+        assert 'Loan Disbursement' in self._content()
+
+    def test_maps_loan_repayment(self):
+        assert 'Loan Repayment' in self._content()
+
+    def test_uses_batch_insert(self):
+        assert 'executemany' in self._content()
+
+    def test_skips_purged_members(self):
+        assert 'valid_members' in self._content()
+
+    def test_skips_zero_amounts(self):
+        assert 'amount <= 0' in self._content()
+
+    def test_checks_legacy_db_exists(self):
+        assert 'os.path.isfile' in self._content()
+
+    def test_migration_applied_to_live_db(self):
+        conn = sqlite3.connect(os.path.join(ROOT, 'data', 'nfc_cooperative.db'))
+        count = conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE created_by='migration'"
+        ).fetchone()[0]
+        conn.close()
+        assert count > 35000, f"Expected >50000 migrated transactions, got {count}"
+
+    def test_savings_deposits_migrated(self):
+        conn = sqlite3.connect(os.path.join(ROOT, 'data', 'nfc_cooperative.db'))
+        count = conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE transaction_type='Savings Deposit'"
+        ).fetchone()[0]
+        conn.close()
+        assert count > 25000
+
+    def test_loan_disbursements_migrated(self):
+        conn = sqlite3.connect(os.path.join(ROOT, 'data', 'nfc_cooperative.db'))
+        count = conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE transaction_type='Loan Disbursement'"
+        ).fetchone()[0]
+        conn.close()
+        assert count > 35000
+
+    def test_no_orphaned_transactions(self):
+        conn = sqlite3.connect(os.path.join(ROOT, 'data', 'nfc_cooperative.db'))
+        orphans = conn.execute("""
+            SELECT COUNT(*) FROM transactions t
+            WHERE t.member_id IS NOT NULL
+            AND NOT EXISTS (
+                SELECT 1 FROM members m WHERE m.member_id=t.member_id
+            )
+        """).fetchone()[0]
+        conn.close()
+        assert orphans == 0
+
+    def test_all_transactions_have_dates(self):
+        conn = sqlite3.connect(os.path.join(ROOT, 'data', 'nfc_cooperative.db'))
+        nulldates = conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE transaction_date IS NULL"
+        ).fetchone()[0]
+        conn.close()
+        assert nulldates == 0
