@@ -11,10 +11,10 @@ from gui.login_window import LoginWindow
 from gui.setup_wizard import SetupWizard
 from database.db_manager import DatabaseManager
 from database.migrations import run as run_migrations
+from utils.app_paths import get_db_path, get_migrations_dir
 
-BASE_DIR       = os.path.dirname(os.path.abspath(__file__))
-DB_PATH        = os.path.join(BASE_DIR, 'data', 'nfc_cooperative.db')
-MIGRATIONS_DIR = os.path.join(BASE_DIR, 'migrations')
+DB_PATH        = get_db_path()
+MIGRATIONS_DIR = get_migrations_dir()
 
 
 class NFCApp(QApplication):
@@ -88,7 +88,6 @@ class NFCApp(QApplication):
         self._load_main_window()
 
     def _load_main_window(self):
-        # imported here to avoid circular import at module load time
         from gui.main_window import MainWindow
         self.main_window = MainWindow(self)
         self.main_window.show()

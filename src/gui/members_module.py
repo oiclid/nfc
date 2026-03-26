@@ -394,11 +394,26 @@ class MembersModule(QWidget):
                 QDate.currentDate().toString("yyyy-MM-dd"),
                 self.user['username']
             )
+            # auto-process death benefit
+            benefit_msg = ""
+            try:
+                result = self.db.process_death_benefit(
+                    mid, name, self.user['username']
+                )
+                if result['charge_per_member'] > 0:
+                    currency = self.db.get_setting('currency_symbol') or '₦'
+                    benefit_msg = (
+                        f"\n\nDeath benefit processed:\n"
+                        f"  Members charged: {result['members_charged']}\n"
+                        f"  Amount per member: {currency}{result['charge_per_member']:,.2f}\n"
+                        f"  Total collected: {currency}{result['total_benefit']:,.2f}"
+                    )
+            except Exception:
+                pass  # death benefit disabled or zero amount
             self.refresh()
             QMessageBox.information(
                 self, "Member Marked as Deceased",
-                f"{name} has been marked as deceased.\n\n"
-                "Please process the death benefit from Settings > Death Benefits."
+                f"{name} has been marked as deceased.{benefit_msg}"
             )
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to mark member as deceased:\n{e}")

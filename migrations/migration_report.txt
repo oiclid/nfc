@@ -1,4 +1,4 @@
-Migration started: 2026-03-21 23:29:45
+Migration started: 2026-03-23 22:25:58
 Source: /home/oiclid/code/nfc/data/database.sld
 Target: /home/oiclid/code/nfc/data/nfc_cooperative.db
 
@@ -13,4 +13,4 @@ Users:      3/3 migrated
 Bank txns:  6/6 migrated
 
 Migration complete.
-Finished: 2026-03-21 23:29:54
+Finished: 2026-03-23 22:26:13

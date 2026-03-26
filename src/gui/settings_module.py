@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
+from gui.cooperative_fund_module import DangerConfirmDialog
 
 
 class SettingsModule(QWidget):
@@ -36,6 +37,8 @@ class SettingsModule(QWidget):
 
         self.tabs = QTabWidget()
         self.tabs.addTab(self._system_tab(),    "System")
+        self.tabs.addTab(self._fees_tab(),      "Fees")
+        self.tabs.addTab(self._dividends_tab(), "Dividends")
         self.tabs.addTab(self._users_tab(),     "Users")
         self.tabs.addTab(self._savings_tab(),   "Savings Types")
         self.tabs.addTab(self._loans_tab(),     "Loan Types")
@@ -97,6 +100,20 @@ class SettingsModule(QWidget):
         form2.addRow("",                                    self.interest_auto)
         layout.addWidget(grp2)
 
+        warn = QLabel("⚠  Changes to system settings affect all users and operations immediately.")
+        warn.setWordWrap(True)
+        warn.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        warn.setStyleSheet("""
+            QLabel {
+                background-color: #7D6608;
+                color: #FEF9E7;
+                border: 1px solid #F1C40F;
+                border-radius: 4px;
+                padding: 8px;
+            }
+        """)
+        layout.addWidget(warn)
+
         save_btn = QPushButton("Save System Settings")
         save_btn.setFixedHeight(40)
         save_btn.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
@@ -115,6 +132,150 @@ class SettingsModule(QWidget):
     # -------------------------------------------------------------------------
     # Users tab
     # -------------------------------------------------------------------------
+
+
+    def _fees_tab(self) -> QWidget:
+        w, layout = QWidget(), QVBoxLayout()
+        w.setLayout(layout)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(16)
+
+        warn = QLabel("⚠  Fee changes apply to ALL future operations. "
+                      "Existing unpaid fees are not retroactively updated.")
+        warn.setWordWrap(True)
+        warn.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        warn.setStyleSheet("""
+            QLabel {
+                background-color: #7D6608;
+                color: #FEF9E7;
+                border: 1px solid #F1C40F;
+                border-radius: 4px;
+                padding: 8px;
+            }
+        """)
+        layout.addWidget(warn)
+
+        grp  = QGroupBox("Fee Configuration")
+        form = QFormLayout(grp)
+        form.setSpacing(12)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        def fee_spin():
+            s = QDoubleSpinBox()
+            s.setFixedHeight(36)
+            s.setRange(0, 999_999_999)
+            s.setDecimals(2)
+            s.setSingleStep(500)
+            return s
+
+        self.entrance_fee  = fee_spin()
+        self.loan_fee      = fee_spin()
+        self.annual_fee    = fee_spin()
+        self.transfer_fee  = fee_spin()
+
+        form.addRow("Entrance Fee:", self.entrance_fee)
+        form.addRow("Loan Form Fee:", self.loan_fee)
+        form.addRow("Annual Fee:", self.annual_fee)
+        form.addRow("Transfer Fee:", self.transfer_fee)
+
+        layout.addWidget(grp)
+
+        notation_grp  = QGroupBox("Death Benefit Notification")
+        notation_form = QFormLayout(notation_grp)
+        notation_form.setSpacing(10)
+        notation_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self.death_notation = QLineEdit()
+        self.death_notation.setFixedHeight(36)
+        self.death_notation.setPlaceholderText("Use {member_name} as placeholder")
+        notation_form.addRow("Notation Template:", self.death_notation)
+        hint = QLabel("Placeholder {member_name} will be replaced with deceased member name.")
+        hint.setStyleSheet("color: #7F8C8D; font-size: 9pt;")
+        notation_form.addRow("", hint)
+        layout.addWidget(notation_grp)
+
+        save_btn = QPushButton("Save Fee Settings")
+        save_btn.setFixedHeight(40)
+        save_btn.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2980B9; color: white;
+                border: none; border-radius: 4px;
+            }
+            QPushButton:hover { background-color: #3498DB; }
+        """)
+        save_btn.clicked.connect(self._save_fee_settings)
+        layout.addWidget(save_btn)
+        layout.addStretch()
+        return w
+
+    def _dividends_tab(self) -> QWidget:
+        w, layout = QWidget(), QVBoxLayout()
+        w.setLayout(layout)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(16)
+
+        warn = QLabel("⚠  MAJOR WARNING: Dividend settings are system-wide. "
+                      "Changing these values will affect ALL future distributions. "
+                      "Each distribution is permanent and irreversible.")
+        warn.setWordWrap(True)
+        warn.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        warn.setStyleSheet("""
+            QLabel {
+                background-color: #7B241C;
+                color: #FADBD8;
+                border: 2px solid #E74C3C;
+                border-radius: 4px;
+                padding: 10px;
+            }
+        """)
+        layout.addWidget(warn)
+
+        grp  = QGroupBox("Dividend Configuration")
+        form = QFormLayout(grp)
+        form.setSpacing(12)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self.div_method = QComboBox()
+        self.div_method.setFixedHeight(36)
+        self.div_method.addItems(["percentage", "fixed"])
+        self.div_method.currentTextChanged.connect(self._on_div_method_change)
+
+        self.div_pct = QDoubleSpinBox()
+        self.div_pct.setFixedHeight(36)
+        self.div_pct.setRange(0, 100)
+        self.div_pct.setDecimals(2)
+        self.div_pct.setSuffix(" % of savings balance")
+
+        self.div_fixed = QDoubleSpinBox()
+        self.div_fixed.setFixedHeight(36)
+        self.div_fixed.setRange(0, 999_999_999)
+        self.div_fixed.setDecimals(2)
+        self.div_fixed.setSingleStep(1000)
+
+        form.addRow("Distribution Method:", self.div_method)
+        form.addRow("Percentage:", self.div_pct)
+        form.addRow("Fixed Amount:", self.div_fixed)
+        layout.addWidget(grp)
+
+        save_btn = QPushButton("Save Dividend Settings")
+        save_btn.setFixedHeight(40)
+        save_btn.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #922B21; color: white;
+                border: none; border-radius: 4px;
+            }
+            QPushButton:hover { background-color: #E74C3C; }
+        """)
+        save_btn.clicked.connect(self._save_dividend_settings)
+        layout.addWidget(save_btn)
+        layout.addStretch()
+        return w
+
+    def _on_div_method_change(self, method):
+        self.div_pct.setEnabled(method == 'percentage')
+        self.div_fixed.setEnabled(method == 'fixed')
 
     def _users_tab(self) -> QWidget:
         w, layout = QWidget(), QVBoxLayout()
@@ -341,6 +502,8 @@ class SettingsModule(QWidget):
 
     def refresh(self):
         self._load_system_settings()
+        self._load_fee_settings()
+        self._load_dividend_settings()
         self._load_users()
         self._load_savings_types()
         self._load_loan_types()
@@ -432,7 +595,14 @@ class SettingsModule(QWidget):
     # -------------------------------------------------------------------------
 
     def _save_system_settings(self):
-        if not self._confirm("Save Settings", "Save all system settings?"):
+        dlg = DangerConfirmDialog(
+            "Save System Settings",
+            "Saving system settings will affect all users and operations immediately.\n\n"
+            "Review your changes carefully before confirming.",
+            confirm_word="SAVE",
+            parent=self
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         u = self.user['username']
         settings = {
@@ -498,9 +668,14 @@ class SettingsModule(QWidget):
         if not uid: return
         user = self.db.get_user_by_id(uid)
         if not user: return
-        if not self._confirm("Deactivate User",
-                             f"Deactivate '{user['username']}'?\n"
-                             "They will no longer be able to log in."):
+        dlg = DangerConfirmDialog(
+            "Deactivate User",
+            f"Deactivate user '{user['username']}'?\n\n"
+            "They will immediately lose access to the system.",
+            confirm_word="DEACTIVATE",
+            parent=self
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         self.db.deactivate_user(uid, self.user['username'])
         self._load_users()
@@ -665,6 +840,63 @@ class SettingsModule(QWidget):
         )
         self.db.commit()
         self._load_loan_types()
+
+
+    def _load_fee_settings(self):
+        self.entrance_fee.setValue(float(self.db.get_setting('entrance_fee_amount') or 0))
+        self.loan_fee.setValue(float(self.db.get_setting('loan_form_fee_amount') or 0))
+        self.annual_fee.setValue(float(self.db.get_setting('annual_fee_amount') or 0))
+        self.transfer_fee.setValue(float(self.db.get_setting('transfer_fee_amount') or 0))
+        self.death_notation.setText(
+            self.db.get_setting('death_benefit_notation') or
+            'Death benefit charge — {member_name}'
+        )
+
+    def _save_fee_settings(self):
+        dlg = DangerConfirmDialog(
+            "Save Fee Settings",
+            "Fee changes apply to ALL future operations immediately.\n\n"
+            "Existing unpaid fees are not retroactively updated.",
+            confirm_word="SAVE",
+            parent=self
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        u = self.user['username']
+        self.db.update_setting('entrance_fee_amount',  f"{self.entrance_fee.value():.2f}", u)
+        self.db.update_setting('loan_form_fee_amount', f"{self.loan_fee.value():.2f}", u)
+        self.db.update_setting('annual_fee_amount',    f"{self.annual_fee.value():.2f}", u)
+        self.db.update_setting('transfer_fee_amount',  f"{self.transfer_fee.value():.2f}", u)
+        self.db.update_setting('death_benefit_notation', self.death_notation.text().strip(), u)
+        QMessageBox.information(self, "Saved", "Fee settings saved.")
+
+    def _load_dividend_settings(self):
+        method = self.db.get_setting('dividend_distribution_method') or 'percentage'
+        idx = self.div_method.findText(method)
+        if idx >= 0:
+            self.div_method.setCurrentIndex(idx)
+        self.div_pct.setValue(float(self.db.get_setting('dividend_percentage') or 0))
+        self.div_fixed.setValue(float(self.db.get_setting('dividend_fixed_amount') or 0))
+        self._on_div_method_change(method)
+
+    def _save_dividend_settings(self):
+        dlg = DangerConfirmDialog(
+            "Save Dividend Settings",
+            "MAJOR WARNING: These settings are system-wide and will affect ALL future "
+            "dividend distributions.\n\nThis cannot be undone.",
+            confirm_word="SAVE",
+            parent=self
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        u = self.user['username']
+        self.db.update_setting('dividend_distribution_method',
+                               self.div_method.currentText(), u)
+        self.db.update_setting('dividend_percentage',
+                               f"{self.div_pct.value():.2f}", u)
+        self.db.update_setting('dividend_fixed_amount',
+                               f"{self.div_fixed.value():.2f}", u)
+        QMessageBox.information(self, "Saved", "Dividend settings saved.")
 
 
 # ---------------------------------------------------------------------------
