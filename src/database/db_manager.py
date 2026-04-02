@@ -214,6 +214,7 @@ class DatabaseManager:
              created_by)
         )
         self.update_setting('next_member_number', str(next_num + 1))
+        self.charge_entrance_fee(member_id, created_by)
         self.commit()
         return member_id
 
@@ -484,6 +485,7 @@ class DatabaseManager:
                 },
                 created_by=created_by
             )
+        self.charge_loan_form_fee(loan_id, data['member_id'], created_by)
         return loan_id
 
     def record_loan_repayment(self, loan_id: int, amount: float,
@@ -716,3 +718,364 @@ class DatabaseManager:
 
     def get_all_settings(self) -> List[Dict]:
         return self.fetchall("SELECT * FROM system_settings ORDER BY setting_key")
+
+    # -------------------------------------------------------------------------
+    # Cooperative Fund
+    # -------------------------------------------------------------------------
+
+    def get_fund_balance(self) -> float:
+        row = self.fetchone(
+            "SELECT COALESCE(SUM(CASE WHEN is_credit=1 THEN amount ELSE -amount END),0) as bal FROM cooperative_fund_transactions"
+        )
+        return round(float(row['bal']), 2) if row else 0.0
+
+    def get_fund_transactions(self, limit: int = None) -> List[Dict]:
+        q = "SELECT * FROM cooperative_fund_transactions ORDER BY txn_date DESC, fund_txn_id DESC"
+        if limit:
+            q += f" LIMIT {limit}"
+        return self.fetchall(q)
+
+    def _credit_fund(self, amount: float, category: str, description: str,
+                     member_id: str = None, reference_id: str = None,
+                     txn_date: str = None, created_by: str = 'system'):
+        from datetime import date
+        balance = self.get_fund_balance() + amount
+        self.execute(
+            """INSERT INTO cooperative_fund_transactions
+               (txn_date, txn_type, category, description, amount, is_credit,
+                member_id, reference_id, running_balance, created_by)
+               VALUES (?,?,?,?,?,1,?,?,?,?)""",
+            (txn_date or date.today().isoformat(),
+             'Credit', category, description, amount,
+             member_id, reference_id, balance, created_by)
+        )
+
+    def _debit_fund(self, amount: float, category: str, description: str,
+                    member_id: str = None, reference_id: str = None,
+                    txn_date: str = None, created_by: str = 'system'):
+        from datetime import date
+        balance = self.get_fund_balance() - amount
+        self.execute(
+            """INSERT INTO cooperative_fund_transactions
+               (txn_date, txn_type, category, description, amount, is_credit,
+                member_id, reference_id, running_balance, created_by)
+               VALUES (?,?,?,?,?,0,?,?,?,?)""",
+            (txn_date or date.today().isoformat(),
+             'Debit', category, description, amount,
+             member_id, reference_id, balance, created_by)
+        )
+
+    def manual_fund_entry(self, amount: float, is_credit: bool,
+                          category: str, description: str,
+                          created_by: str):
+        with self.transaction():
+            if is_credit:
+                self._credit_fund(amount, category, description, created_by=created_by)
+            else:
+                self._debit_fund(amount, category, description, created_by=created_by)
+
+    # -------------------------------------------------------------------------
+    # Entrance Fees
+    # -------------------------------------------------------------------------
+
+    def charge_entrance_fee(self, member_id: str, created_by: str):
+        amount = float(self.get_setting('entrance_fee_amount') or 0)
+        from datetime import date
+        self.execute(
+            """INSERT INTO entrance_fees (member_id, amount, is_paid, due_date)
+               VALUES (?,?,?,?)""",
+            (member_id, amount, 0, date.today().isoformat())
+        )
+        if amount > 0:
+            self._credit_fund(
+                amount, 'Entrance Fee',
+                f"Entrance fee — {member_id}",
+                member_id=member_id, created_by=created_by
+            )
+
+    def pay_entrance_fee(self, member_id: str, paid_by: str):
+        from datetime import date
+        fee = self.fetchone(
+            "SELECT * FROM entrance_fees WHERE member_id=? AND is_paid=0", (member_id,)
+        )
+        if not fee:
+            return
+        self.execute(
+            "UPDATE entrance_fees SET is_paid=1, paid_date=?, paid_by=? WHERE fee_id=?",
+            (date.today().isoformat(), paid_by, fee['fee_id'])
+        )
+
+    def get_entrance_fee_status(self, member_id: str) -> Optional[Dict]:
+        return self.fetchone(
+            "SELECT * FROM entrance_fees WHERE member_id=? ORDER BY fee_id DESC LIMIT 1",
+            (member_id,)
+        )
+
+    # -------------------------------------------------------------------------
+    # Loan Form Fees
+    # -------------------------------------------------------------------------
+
+    def charge_loan_form_fee(self, loan_id: int, member_id: str, created_by: str):
+        amount = float(self.get_setting('loan_form_fee_amount') or 0)
+        from datetime import date
+        self.execute(
+            """INSERT INTO loan_fees (loan_id, member_id, amount, is_paid, due_date)
+               VALUES (?,?,?,?,?)""",
+            (loan_id, member_id, amount, 0, date.today().isoformat())
+        )
+        if amount > 0:
+            self._credit_fund(
+                amount, 'Loan Form Fee',
+                f"Loan form fee — loan #{loan_id}",
+                member_id=member_id,
+                reference_id=str(loan_id),
+                created_by=created_by
+            )
+
+    # -------------------------------------------------------------------------
+    # Annual Fees
+    # -------------------------------------------------------------------------
+
+    def charge_annual_fee_all(self, year: int, created_by: str) -> int:
+        amount  = float(self.get_setting('annual_fee_amount') or 0)
+        members = self.get_all_members(active_only=True)
+        charged = 0
+        from datetime import date
+        with self.transaction():
+            for m in members:
+                existing = self.fetchone(
+                    "SELECT 1 FROM annual_fees WHERE member_id=? AND year=?",
+                    (m['member_id'], year)
+                )
+                if existing:
+                    continue
+                self.execute(
+                    """INSERT INTO annual_fees (member_id, year, amount, is_paid, due_date)
+                       VALUES (?,?,?,0,?)""",
+                    (m['member_id'], year, amount, date.today().isoformat())
+                )
+                if amount > 0:
+                    self._credit_fund(
+                        amount, 'Annual Fee',
+                        f"Annual fee {year} — {m['member_id']}",
+                        member_id=m['member_id'],
+                        created_by=created_by
+                    )
+                charged += 1
+        return charged
+
+    def get_annual_fees(self, year: int = None) -> List[Dict]:
+        q = "SELECT af.*, m.first_name, m.last_name FROM annual_fees af JOIN members m ON af.member_id=m.member_id"
+        if year:
+            return self.fetchall(q + " WHERE af.year=? ORDER BY af.member_id", (year,))
+        return self.fetchall(q + " ORDER BY af.year DESC, af.member_id")
+
+    # -------------------------------------------------------------------------
+    # Death Benefit (updated)
+    # -------------------------------------------------------------------------
+
+    def process_death_benefit(self, deceased_member_id: str,
+                               deceased_name: str,
+                               processed_by: str) -> Dict:
+        if self.get_setting('death_benefit_enabled') != '1':
+            raise ValueError("Death benefit system is disabled")
+
+        charge         = float(self.get_setting('death_benefit_amount') or 0)
+        notation_tmpl  = self.get_setting('death_benefit_notation') or \
+                         'Death benefit charge — {member_name}'
+        notation       = notation_tmpl.replace('{member_name}', deceased_name)
+        active_members = self.get_all_members(active_only=True)
+        total_benefit  = len(active_members) * charge
+
+        from datetime import date
+        with self.transaction():
+            cursor = self.execute(
+                """INSERT INTO death_benefits
+                   (member_id, benefit_amount, charge_per_member,
+                    members_charged, processed_by, processed_date)
+                   VALUES (?,?,?,?,?,?)""",
+                (deceased_member_id, total_benefit, charge,
+                 len(active_members), processed_by, date.today().isoformat())
+            )
+            benefit_id = cursor.lastrowid
+
+            for m in active_members:
+                self.execute(
+                    """INSERT INTO death_benefit_charges
+                       (death_benefit_id, member_id, charge_amount, processed_date)
+                       VALUES (?,?,?,?)""",
+                    (benefit_id, m['member_id'], charge, date.today().isoformat())
+                )
+                if charge > 0:
+                    # debit from premium savings if available
+                    acct = self.fetchone(
+                        """SELECT sa.account_id, sa.current_balance
+                           FROM savings_accounts sa
+                           JOIN savings_types st ON sa.savings_type_id=st.savings_type_id
+                           WHERE sa.member_id=? AND st.type_code='PREMIUM' AND sa.is_active=1""",
+                        (m['member_id'],)
+                    )
+                    if acct:
+                        self.execute(
+                            """UPDATE savings_accounts
+                               SET current_balance=current_balance-?,
+                                   total_withdrawals=total_withdrawals+?
+                               WHERE account_id=?""",
+                            (charge, charge, acct['account_id'])
+                        )
+                        self._record_transaction(
+                            member_id=m['member_id'],
+                            transaction_type='Death Benefit Charge',
+                            account_type='Savings',
+                            account_id=str(acct['account_id']),
+                            amount=charge,
+                            is_credit=False,
+                            txn_data={'description': notation,
+                                      'payment_method': 'System'},
+                            created_by=processed_by
+                        )
+
+            # credit fund
+            if charge > 0:
+                self._credit_fund(
+                    total_benefit, 'Death Benefit',
+                    f"Death benefit collected — {deceased_name}",
+                    member_id=deceased_member_id,
+                    reference_id=str(benefit_id),
+                    created_by=processed_by
+                )
+
+        return {
+            'benefit_id':        benefit_id,
+            'total_benefit':     total_benefit,
+            'members_charged':   len(active_members),
+            'charge_per_member': charge,
+            'notation':          notation,
+        }
+
+    # -------------------------------------------------------------------------
+    # Transfer Fee
+    # -------------------------------------------------------------------------
+
+    def transfer_member(self, member_id: str, new_station_id: str,
+                         reason: str, created_by: str):
+        member = self.get_member(member_id)
+        if not member:
+            raise ValueError(f"Member {member_id} not found")
+        old_station = member['station_id']
+        fee = float(self.get_setting('transfer_fee_amount') or 0)
+        from datetime import date
+        with self.transaction():
+            self.execute(
+                "UPDATE members SET station_id=?, modified_by=?, modified_date=? WHERE member_id=?",
+                (new_station_id, created_by, date.today().isoformat(), member_id)
+            )
+            self.execute(
+                """INSERT INTO member_transfers
+                   (member_id, from_station_id, to_station_id, transfer_date, reason, approved_by)
+                   VALUES (?,?,?,?,?,?)""",
+                (member_id, old_station, new_station_id,
+                 date.today().isoformat(), reason, created_by)
+            )
+            if fee > 0:
+                self._credit_fund(
+                    fee, 'Transfer Fee',
+                    f"Transfer fee — {member_id} ({old_station} → {new_station_id})",
+                    member_id=member_id, created_by=created_by
+                )
+
+    # -------------------------------------------------------------------------
+    # Dividends
+    # -------------------------------------------------------------------------
+
+    def distribute_dividends(self, period: str, created_by: str) -> Dict:
+        method      = self.get_setting('dividend_distribution_method') or 'percentage'
+        pct         = float(self.get_setting('dividend_percentage') or 0)
+        fixed_amt   = float(self.get_setting('dividend_fixed_amount') or 0)
+        members     = self.get_all_members(active_only=True)
+        total_dist  = 0.0
+        from datetime import date
+
+        with self.transaction():
+            cursor = self.execute(
+                """INSERT INTO dividends
+                   (distribution_date, period, distribution_method,
+                    total_distributed, members_paid, created_by, created_date)
+                   VALUES (?,?,?,0,0,?,datetime('now','localtime'))""",
+                (date.today().isoformat(), period, method, created_by)
+            )
+            div_id = cursor.lastrowid
+
+            for m in members:
+                if method == 'percentage':
+                    savings = self.fetchone(
+                        "SELECT COALESCE(SUM(current_balance),0) as bal FROM savings_accounts WHERE member_id=? AND is_active=1",
+                        (m['member_id'],)
+                    )
+                    amount = round(float(savings['bal']) * (pct / 100), 2)
+                else:
+                    amount = fixed_amt
+
+                if amount <= 0:
+                    continue
+
+                savings_row = self.fetchone(
+                    """SELECT sa.account_id, sa.current_balance
+                       FROM savings_accounts sa
+                       JOIN savings_types st ON sa.savings_type_id=st.savings_type_id
+                       WHERE sa.member_id=? AND st.type_code='PREMIUM' AND sa.is_active=1""",
+                    (m['member_id'],)
+                )
+                if savings_row:
+                    self.execute(
+                        """UPDATE savings_accounts
+                           SET current_balance=current_balance+?,
+                               interest_earned=interest_earned+?
+                           WHERE account_id=?""",
+                        (amount, amount, savings_row['account_id'])
+                    )
+                    self._record_transaction(
+                        member_id=m['member_id'],
+                        transaction_type='Dividend Payment',
+                        account_type='Savings',
+                        account_id=str(savings_row['account_id']),
+                        amount=amount,
+                        is_credit=True,
+                        txn_data={'description': f"Dividend — {period}",
+                                  'payment_method': 'System'},
+                        created_by=created_by
+                    )
+
+                self.execute(
+                    """INSERT INTO dividend_payments
+                       (dividend_id, member_id, amount, savings_balance)
+                       VALUES (?,?,?,?)""",
+                    (div_id, m['member_id'], amount,
+                     savings_row['current_balance'] if savings_row else 0)
+                )
+                total_dist += amount
+
+            self.execute(
+                "UPDATE dividends SET total_distributed=?, members_paid=? WHERE dividend_id=?",
+                (total_dist, len(members), div_id)
+            )
+
+            # debit fund
+            if total_dist > 0:
+                self._debit_fund(
+                    total_dist, 'Dividend',
+                    f"Dividend distribution — {period}",
+                    created_by=created_by
+                )
+
+        return {
+            'dividend_id':     div_id,
+            'total_distributed': total_dist,
+            'members_paid':    len(members),
+            'period':          period,
+        }
+
+    def get_dividends_history(self) -> List[Dict]:
+        return self.fetchall(
+            "SELECT * FROM dividends ORDER BY distribution_date DESC"
+        )

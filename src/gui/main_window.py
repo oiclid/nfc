@@ -124,15 +124,16 @@ class MainWindow(QMainWindow):
             nav_items.append(("Members",      2))
 
         if u['can_operate']:
-            nav_items.append(("Savings",      3))
-            nav_items.append(("Loans",        4))
-            nav_items.append(("Transactions", 5))
+            nav_items.append(("Savings",          3))
+            nav_items.append(("Loans",            4))
+            nav_items.append(("Transactions",     5))
+            nav_items.append(("Cooperative Fund", 6))
 
         if u['can_view_reports']:
-            nav_items.append(("Reports",      6))
+            nav_items.append(("Reports",          7))
 
         if u['can_maintain']:
-            nav_items.append(("Settings",     7))
+            nav_items.append(("Settings",         8))
 
         for label, idx in nav_items:
             btn = QPushButton(label)
@@ -212,14 +213,15 @@ class MainWindow(QMainWindow):
                 return self._placeholder(slot)
 
         slot_defs = [
-            (0, 'gui.dashboard_module',    'DashboardModule',    True),
-            (1, 'gui.stations_module',     'StationsModule',     u['can_maintain']),
-            (2, 'gui.members_module',      'MembersModule',      u['can_maintain']),
-            (3, 'gui.savings_module',      'SavingsModule',      u['can_operate']),
-            (4, 'gui.loans_module',        'LoansModule',        u['can_operate']),
-            (5, 'gui.transactions_module', 'TransactionsModule', u['can_operate']),
-            (6, 'gui.reports_module',      'ReportsModule',      u['can_view_reports']),
-            (7, 'gui.settings_module',     'SettingsModule',     u['can_maintain']),
+            (0, 'gui.dashboard_module',         'DashboardModule',         True),
+            (1, 'gui.stations_module',           'StationsModule',          u['can_maintain']),
+            (2, 'gui.members_module',            'MembersModule',           u['can_maintain']),
+            (3, 'gui.savings_module',            'SavingsModule',           u['can_operate']),
+            (4, 'gui.loans_module',              'LoansModule',             u['can_operate']),
+            (5, 'gui.transactions_module',       'TransactionsModule',      u['can_operate']),
+            (6, 'gui.cooperative_fund_module',   'CooperativeFundModule',   u['can_operate']),
+            (7, 'gui.reports_module',            'ReportsModule',           u['can_view_reports']),
+            (8, 'gui.settings_module',           'SettingsModule',          u['can_maintain']),
         ]
 
         for slot, module_path, class_name, allowed in slot_defs:

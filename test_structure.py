@@ -581,7 +581,7 @@ class TestMainWindow:
         content = self._content()
         for mod in ['DashboardModule', 'StationsModule', 'MembersModule',
                     'SavingsModule', 'LoansModule', 'TransactionsModule',
-                    'ReportsModule', 'SettingsModule']:
+                    'CooperativeFundModule', 'ReportsModule', 'SettingsModule']:
             assert mod in content, f"Missing: {mod}"
 
 
@@ -1384,3 +1384,237 @@ class TestSettingsModule:
 
     def test_default_perms_by_role(self):
         assert '_set_default_perms' in self._content()
+
+
+# ─── Stage 14: cooperative fund, fees, dividends ──────────────────────────────
+
+class TestMigration0004:
+    def test_migration_file_exists(self):
+        assert os.path.isfile(os.path.join(ROOT, 'migrations', '0004_cooperative_fund.py'))
+
+    def test_has_up_function(self):
+        with open(os.path.join(ROOT, 'migrations', '0004_cooperative_fund.py')) as f:
+            content = f.read()
+        assert 'def up(' in content
+
+    def test_cooperative_fund_table_exists(self):
+        conn = sqlite3.connect(os.path.join(ROOT, 'data', 'nfc_cooperative.db'))
+        tables = [r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()]
+        conn.close()
+        for t in ['cooperative_fund_transactions', 'entrance_fees',
+                  'loan_fees', 'annual_fees', 'dividend_payments']:
+            assert t in tables, f"Missing table: {t}"
+
+    def test_new_settings_seeded(self):
+        conn = sqlite3.connect(os.path.join(ROOT, 'data', 'nfc_cooperative.db'))
+        for key in ['entrance_fee_amount', 'loan_form_fee_amount',
+                    'annual_fee_amount', 'transfer_fee_amount',
+                    'death_benefit_notation', 'dividend_distribution_method']:
+            row = conn.execute(
+                "SELECT 1 FROM system_settings WHERE setting_key=?", (key,)
+            ).fetchone()
+            assert row, f"Missing setting: {key}"
+        conn.close()
+
+
+class TestDBManagerFund:
+    @pytest.fixture(autouse=True)
+    def setup(self, tmp_path):
+        import shutil, sys
+        src_path = os.path.join(ROOT, 'src')
+        if src_path not in sys.path:
+            sys.path.insert(0, src_path)
+        from database.db_manager import DatabaseManager
+        db_src  = os.path.join(ROOT, 'data', 'nfc_cooperative.db')
+        db_dest = str(tmp_path / 'test.db')
+        shutil.copy(db_src, db_dest)
+        self.db = DatabaseManager(db_dest)
+        yield
+        self.db.close()
+
+    def test_get_fund_balance_returns_float(self):
+        bal = self.db.get_fund_balance()
+        assert isinstance(bal, float)
+
+    def test_credit_fund(self):
+        before = self.db.get_fund_balance()
+        self.db._credit_fund(1000.0, 'Manual', 'Test credit', created_by='test')
+        self.db.commit()
+        assert self.db.get_fund_balance() == round(before + 1000.0, 2)
+
+    def test_debit_fund(self):
+        self.db._credit_fund(5000.0, 'Manual', 'Setup', created_by='test')
+        self.db.commit()
+        before = self.db.get_fund_balance()
+        self.db._debit_fund(2000.0, 'Manual', 'Test debit', created_by='test')
+        self.db.commit()
+        assert self.db.get_fund_balance() == round(before - 2000.0, 2)
+
+    def test_get_fund_transactions(self):
+        self.db._credit_fund(500.0, 'Test', 'Test', created_by='test')
+        self.db.commit()
+        txns = self.db.get_fund_transactions()
+        assert isinstance(txns, list)
+        assert len(txns) >= 1
+
+    def test_charge_entrance_fee_creates_record(self):
+        mid = self.db.add_member({
+            'station_id': '01', 'first_name': 'Fee',
+            'last_name': 'Test', 'gender': 'Male',
+            'date_joined': '2026-01-01'
+        }, 'admin')
+        fee = self.db.fetchone(
+            "SELECT * FROM entrance_fees WHERE member_id=?", (mid,)
+        )
+        assert fee is not None
+
+    def test_annual_fee_charge(self):
+        count = self.db.charge_annual_fee_all(2026, 'admin')
+        self.db.commit()
+        assert count > 0
+        fees = self.db.get_annual_fees(2026)
+        assert len(fees) > 0
+
+    def test_annual_fee_no_duplicate(self):
+        self.db.charge_annual_fee_all(2099, 'admin')
+        self.db.commit()
+        count1 = len(self.db.get_annual_fees(2099))
+        self.db.charge_annual_fee_all(2099, 'admin')
+        self.db.commit()
+        count2 = len(self.db.get_annual_fees(2099))
+        assert count1 == count2
+
+    def test_distribute_dividends(self):
+        self.db._credit_fund(999_999.0, 'Setup', 'Fund for test', created_by='test')
+        self.db.update_setting('dividend_distribution_method', 'fixed')
+        self.db.update_setting('dividend_fixed_amount', '100.00')
+        self.db.commit()
+        result = self.db.distribute_dividends('2026', 'admin')
+        assert result['members_paid'] > 0
+        assert result['total_distributed'] > 0
+
+    def test_transfer_member(self):
+        mid = self.db.add_member({
+            'station_id': '01', 'first_name': 'Trans',
+            'last_name': 'Test', 'gender': 'Male',
+            'date_joined': '2026-01-01'
+        }, 'admin')
+        self.db.transfer_member(mid, '02', 'Test transfer', 'admin')
+        self.db.commit()
+        member = self.db.get_member(mid)
+        assert member['station_id'] == '02'
+
+
+class TestCooperativeFundModule:
+    def _content(self):
+        with open(os.path.join(ROOT, 'src', 'gui', 'cooperative_fund_module.py')) as f:
+            return f.read()
+
+    def test_file_exists(self):
+        assert os.path.isfile(os.path.join(ROOT, 'src', 'gui', 'cooperative_fund_module.py'))
+
+    def test_has_class(self):
+        assert 'class CooperativeFundModule' in self._content()
+
+    def test_has_danger_confirm_dialog(self):
+        assert 'class DangerConfirmDialog' in self._content()
+
+    def test_has_all_tabs(self):
+        content = self._content()
+        for tab in ['Fund Transactions', 'Entrance Fees', 'Annual Fees', 'Dividends']:
+            assert tab in content, f"Missing tab: {tab}"
+
+    def test_has_manual_entry(self):
+        assert '_manual_entry' in self._content()
+
+    def test_has_pay_entrance_fee(self):
+        assert '_pay_entrance_fee' in self._content()
+
+    def test_has_charge_annual_fee(self):
+        assert '_charge_annual_fee' in self._content()
+
+    def test_has_distribute_dividends(self):
+        assert '_distribute_dividends' in self._content()
+
+    def test_danger_confirm_requires_word(self):
+        assert 'confirm_word' in self._content()
+
+    def test_danger_banner_style(self):
+        assert '7B241C' in self._content()
+
+    def test_has_balance_card(self):
+        assert 'balance_lbl' in self._content()
+
+    def test_has_fund_filters(self):
+        content = self._content()
+        assert 'fund_cat_filter' in content
+        assert 'fund_type_filter' in content
+        assert 'fund_date_from' in content
+
+
+class TestSettingsStage14:
+    def _content(self):
+        with open(os.path.join(ROOT, 'src', 'gui', 'settings_module.py')) as f:
+            return f.read()
+
+    def test_has_fees_tab(self):
+        assert '_fees_tab' in self._content()
+
+    def test_has_dividends_tab(self):
+        assert '_dividends_tab' in self._content()
+
+    def test_has_danger_warnings(self):
+        assert 'DangerConfirmDialog' in self._content()
+
+    def test_system_save_requires_danger_confirm(self):
+        content = self._content()
+        assert 'confirm_word="SAVE"' in content
+
+    def test_deactivate_user_requires_danger_confirm(self):
+        assert 'confirm_word="DEACTIVATE"' in self._content()
+
+    def test_has_fee_settings_fields(self):
+        content = self._content()
+        for field in ['entrance_fee', 'loan_fee', 'annual_fee', 'transfer_fee']:
+            assert field in content, f"Missing field: {field}"
+
+    def test_has_dividend_method_selector(self):
+        assert 'div_method' in self._content()
+
+    def test_has_major_warning_on_dividends(self):
+        assert 'MAJOR WARNING' in self._content()
+
+    def test_death_notation_field(self):
+        assert 'death_notation' in self._content()
+
+
+class TestMembersDeathBenefit:
+    def _content(self):
+        with open(os.path.join(ROOT, 'src', 'gui', 'members_module.py')) as f:
+            return f.read()
+
+    def test_death_benefit_auto_triggered(self):
+        assert 'process_death_benefit' in self._content()
+
+    def test_death_benefit_result_shown(self):
+        assert 'Death benefit processed' in self._content()
+
+    def test_handles_disabled_benefit(self):
+        assert 'except Exception' in self._content()
+
+
+class TestMainWindowFund:
+    def _content(self):
+        with open(os.path.join(ROOT, 'src', 'gui', 'main_window.py')) as f:
+            return f.read()
+
+    def test_cooperative_fund_in_nav(self):
+        assert 'Cooperative Fund' in self._content()
+
+    def test_cooperative_fund_module_loaded(self):
+        assert 'CooperativeFundModule' in self._content()
+
+    def test_fund_slot_6(self):
+        assert "(6, 'gui.cooperative_fund_module'" in self._content()
