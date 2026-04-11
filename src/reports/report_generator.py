@@ -16,9 +16,36 @@ from reportlab.platypus import (
     Spacer, HRFlowable, PageBreak
 )
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+
+
+def _register_fonts():
+    fonts_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        'data', 'fonts'
+    )
+    try:
+        pdfmetrics.registerFont(TTFont('DejaVu',        os.path.join(fonts_dir, 'DejaVuSans.ttf')))
+        pdfmetrics.registerFont(TTFont('DejaVu-Bold',   os.path.join(fonts_dir, 'DejaVuSans-Bold.ttf')))
+        pdfmetrics.registerFont(TTFont('DejaVu-Italic', os.path.join(fonts_dir, 'DejaVuSans-Oblique.ttf')))
+        from reportlab.pdfbase.pdfmetrics import registerFontFamily
+        registerFontFamily('DejaVu',
+                           normal='DejaVu',
+                           bold='DejaVu-Bold',
+                           italic='DejaVu-Italic')
+        return True
+    except Exception:
+        return False  # graceful fallback to Helvetica
+
+
+_FONTS_OK  = _register_fonts()
+_FONT      = 'DejaVu'        if _FONTS_OK else 'Helvetica'
+_FONT_BOLD = 'DejaVu-Bold'   if _FONTS_OK else 'Helvetica-Bold'
+_FONT_ITAL = 'DejaVu-Italic' if _FONTS_OK else 'Helvetica-Oblique'
 
 
 # ---------------------------------------------------------------------------
@@ -94,21 +121,21 @@ class ReportGenerator:
 
     def _styles(self):
         s = getSampleStyleSheet()
-        s.add(ParagraphStyle('OrgName',   fontName='Helvetica-Bold',  fontSize=16,
+        s.add(ParagraphStyle('OrgName',   fontName=_FONT_BOLD, fontSize=16,
                               textColor=HEADER_COLOR,  alignment=TA_CENTER))
-        s.add(ParagraphStyle('ReportTitle', fontName='Helvetica-Bold', fontSize=13,
+        s.add(ParagraphStyle('ReportTitle', fontName=_FONT_BOLD, fontSize=13,
                               textColor=DARK_TEXT,     alignment=TA_CENTER))
-        s.add(ParagraphStyle('SubTitle',  fontName='Helvetica',       fontSize=10,
+        s.add(ParagraphStyle('SubTitle',  fontName=_FONT,      fontSize=10,
                               textColor=colors.grey,   alignment=TA_CENTER))
-        s.add(ParagraphStyle('SectionHdr', fontName='Helvetica-Bold', fontSize=11,
+        s.add(ParagraphStyle('SectionHdr', fontName=_FONT_BOLD, fontSize=11,
                               textColor=HEADER_COLOR,  spaceBefore=12, spaceAfter=4))
-        s.add(ParagraphStyle('TableCell', fontName='Helvetica',       fontSize=9,
+        s.add(ParagraphStyle('TableCell', fontName=_FONT,      fontSize=9,
                               textColor=DARK_TEXT))
-        s.add(ParagraphStyle('TableHdr',  fontName='Helvetica-Bold',  fontSize=9,
+        s.add(ParagraphStyle('TableHdr',  fontName=_FONT_BOLD, fontSize=9,
                               textColor=WHITE))
-        s.add(ParagraphStyle('Footer',    fontName='Helvetica',       fontSize=8,
+        s.add(ParagraphStyle('Footer',    fontName=_FONT,      fontSize=8,
                               textColor=colors.grey,   alignment=TA_CENTER))
-        s.add(ParagraphStyle('Summary',   fontName='Helvetica-Bold',  fontSize=10,
+        s.add(ParagraphStyle('Summary',   fontName=_FONT_BOLD, fontSize=10,
                               textColor=DARK_TEXT))
         return s
 
@@ -134,10 +161,10 @@ class ReportGenerator:
         return TableStyle([
             ('BACKGROUND',   (0, 0),           (-1, header_rows - 1), HEADER_COLOR),
             ('TEXTCOLOR',    (0, 0),           (-1, header_rows - 1), WHITE),
-            ('FONTNAME',     (0, 0),           (-1, header_rows - 1), 'Helvetica-Bold'),
+            ('FONTNAME',     (0, 0),           (-1, header_rows - 1), _FONT_BOLD),
             ('FONTSIZE',     (0, 0),           (-1, header_rows - 1), 9),
             ('ALIGN',        (0, 0),           (-1, header_rows - 1), 'CENTER'),
-            ('FONTNAME',     (0, header_rows), (-1, -1),              'Helvetica'),
+            ('FONTNAME',     (0, header_rows), (-1, -1),              _FONT),
             ('FONTSIZE',     (0, header_rows), (-1, -1),              8),
             ('ROWBACKGROUNDS', (0, header_rows), (-1, -1),            [WHITE, ALT_ROW_COLOR]),
             ('GRID',         (0, 0),           (-1, -1),              0.4, colors.HexColor('#CCCCCC')),
@@ -199,7 +226,9 @@ class ReportGenerator:
     # -------------------------------------------------------------------------
 
     def members_list_pdf(self, station_id: Optional[str] = None,
-                          status: str = 'Active') -> str:
+                          status: str = 'Active',
+                          date_from: Optional[str] = None,
+                          date_to: Optional[str] = None) -> str:
         q = """
             SELECT m.member_id, m.first_name, m.middle_name, m.last_name,
                    m.gender, m.date_joined, m.phone_number, m.grade_level,
@@ -216,6 +245,10 @@ class ReportGenerator:
             q += " AND m.is_active=0 AND m.is_deceased=0"
         elif status == 'Deceased':
             q += " AND m.is_deceased=1"
+        if date_from:
+            q += " AND m.date_joined >= ?"; params.append(date_from)
+        if date_to:
+            q += " AND m.date_joined <= ?"; params.append(date_to)
         q += " ORDER BY m.member_id"
         members = self._q(q, tuple(params))
 
@@ -247,7 +280,9 @@ class ReportGenerator:
         return out
 
     def members_list_excel(self, station_id: Optional[str] = None,
-                            status: str = 'Active') -> str:
+                            status: str = 'Active',
+                            date_from: Optional[str] = None,
+                            date_to: Optional[str] = None) -> str:
         q = """
             SELECT m.member_id, m.first_name, m.middle_name, m.last_name,
                    m.gender, m.date_joined, m.phone_number, m.employee_id,
@@ -264,6 +299,10 @@ class ReportGenerator:
             q += " AND m.is_active=0 AND m.is_deceased=0"
         elif status == 'Deceased':
             q += " AND m.is_deceased=1"
+        if date_from:
+            q += " AND m.date_joined >= ?"; params.append(date_from)
+        if date_to:
+            q += " AND m.date_joined <= ?"; params.append(date_to)
         q += " ORDER BY m.member_id"
         members = self._q(q, tuple(params))
 
@@ -301,7 +340,9 @@ class ReportGenerator:
     # 2. Savings Summary
     # -------------------------------------------------------------------------
 
-    def savings_summary_pdf(self, station_id: Optional[str] = None) -> str:
+    def savings_summary_pdf(self, station_id: Optional[str] = None,
+                             date_from: Optional[str] = None,
+                             date_to: Optional[str] = None) -> str:
         q = """
             SELECT m.member_id,
                    m.first_name || ' ' || COALESCE(m.middle_name || ' ','') || m.last_name AS full_name,
@@ -319,6 +360,10 @@ class ReportGenerator:
         params = []
         if station_id:
             q += " AND m.station_id=?"; params.append(station_id)
+        if date_from:
+            q += " AND sa.date_opened >= ?"; params.append(date_from)
+        if date_to:
+            q += " AND sa.date_opened <= ?"; params.append(date_to)
         q += " GROUP BY m.member_id ORDER BY m.member_id"
         rows = self._q(q, tuple(params))
 
@@ -360,7 +405,7 @@ class ReportGenerator:
         col_widths = [2.2*cm, 5.5*cm, 4.5*cm, 3.5*cm, 3.5*cm, 3.5*cm, 3.5*cm]
         t = Table(table_rows, colWidths=col_widths, repeatRows=1)
         style = self._pdf_table_style(len(headers))
-        style.add('FONTNAME',   (0, len(table_rows)-1), (-1, -1), 'Helvetica-Bold')
+        style.add('FONTNAME',   (0, len(table_rows)-1), (-1, -1), _FONT_BOLD)
         style.add('BACKGROUND', (0, len(table_rows)-1), (-1, -1), ACCENT_COLOR)
         style.add('TEXTCOLOR',  (0, len(table_rows)-1), (-1, -1), WHITE)
         t.setStyle(style)
@@ -368,7 +413,9 @@ class ReportGenerator:
         doc.build(story)
         return out
 
-    def savings_summary_excel(self, station_id: Optional[str] = None) -> str:
+    def savings_summary_excel(self, station_id: Optional[str] = None,
+                               date_from: Optional[str] = None,
+                               date_to: Optional[str] = None) -> str:
         q = """
             SELECT m.member_id,
                    m.first_name || ' ' || COALESCE(m.middle_name || ' ','') || m.last_name AS full_name,
@@ -386,6 +433,10 @@ class ReportGenerator:
         params = []
         if station_id:
             q += " AND m.station_id=?"; params.append(station_id)
+        if date_from:
+            q += " AND sa.date_opened >= ?"; params.append(date_from)
+        if date_to:
+            q += " AND sa.date_opened <= ?"; params.append(date_to)
         q += " GROUP BY m.member_id ORDER BY m.member_id"
         rows = self._q(q, tuple(params))
 
@@ -436,7 +487,9 @@ class ReportGenerator:
     # -------------------------------------------------------------------------
 
     def loans_summary_pdf(self, station_id: Optional[str] = None,
-                           status: str = 'Active') -> str:
+                           status: str = 'Active',
+                           date_from: Optional[str] = None,
+                           date_to: Optional[str] = None) -> str:
         q = """
             SELECT l.loan_number, m.member_id,
                    m.first_name || ' ' || COALESCE(m.middle_name || ' ','') || m.last_name AS full_name,
@@ -455,6 +508,10 @@ class ReportGenerator:
             q += " AND l.station_id=?"; params.append(station_id)
         if status != 'All':
             q += " AND l.status=?"; params.append(status)
+        if date_from:
+            q += " AND l.disbursement_date >= ?"; params.append(date_from)
+        if date_to:
+            q += " AND l.disbursement_date <= ?"; params.append(date_to)
         q += " ORDER BY m.member_id, l.start_date"
         loans    = self._q(q, tuple(params))
         currency = self._currency()
@@ -499,7 +556,7 @@ class ReportGenerator:
                       3*cm, 3*cm, 3*cm, 2*cm]
         t = Table(table_rows, colWidths=col_widths, repeatRows=1)
         style = self._pdf_table_style(len(headers))
-        style.add('FONTNAME',   (0, len(table_rows)-1), (-1, -1), 'Helvetica-Bold')
+        style.add('FONTNAME',   (0, len(table_rows)-1), (-1, -1), _FONT_BOLD)
         style.add('BACKGROUND', (0, len(table_rows)-1), (-1, -1), ACCENT_COLOR)
         style.add('TEXTCOLOR',  (0, len(table_rows)-1), (-1, -1), WHITE)
         t.setStyle(style)
@@ -508,7 +565,9 @@ class ReportGenerator:
         return out
 
     def loans_summary_excel(self, station_id: Optional[str] = None,
-                             status: str = 'Active') -> str:
+                             status: str = 'Active',
+                             date_from: Optional[str] = None,
+                             date_to: Optional[str] = None) -> str:
         q = """
             SELECT l.loan_number, m.member_id,
                    m.first_name || ' ' || COALESCE(m.middle_name || ' ','') || m.last_name AS full_name,
@@ -528,6 +587,10 @@ class ReportGenerator:
             q += " AND l.station_id=?"; params.append(station_id)
         if status != 'All':
             q += " AND l.status=?"; params.append(status)
+        if date_from:
+            q += " AND l.disbursement_date >= ?"; params.append(date_from)
+        if date_to:
+            q += " AND l.disbursement_date <= ?"; params.append(date_to)
         q += " ORDER BY m.member_id, l.start_date"
         loans = self._q(q, tuple(params))
 
@@ -571,7 +634,9 @@ class ReportGenerator:
     # 4. Member Statement
     # -------------------------------------------------------------------------
 
-    def member_statement_pdf(self, member_id: str) -> str:
+    def member_statement_pdf(self, member_id: str,
+                                date_from: Optional[str] = None,
+                                date_to: Optional[str] = None) -> str:
         member = self._q("SELECT * FROM members WHERE member_id=?", (member_id,))
         if not member:
             raise ValueError(f"Member {member_id} not found")
@@ -583,32 +648,49 @@ class ReportGenerator:
                           (m['station_id'],))
         station_name = station[0]['station_name'] if station else m['station_id']
 
-        savings = self._q("""
+        savings_q = """
             SELECT sa.account_number, st.type_name,
                    sa.current_balance, sa.total_deposits, sa.total_withdrawals,
                    sa.interest_earned
             FROM savings_accounts sa
             JOIN savings_types st ON sa.savings_type_id=st.savings_type_id
             WHERE sa.member_id=? AND sa.is_active=1
-        """, (member_id,))
+        """
+        if date_from:
+            savings_q += " AND sa.date_opened >= ?"
+        if date_to:
+            savings_q += " AND sa.date_opened <= ?"
+        savings_params = [member_id]
+        if date_from: savings_params.append(date_from)
+        if date_to:   savings_params.append(date_to)
+        savings = self._q(savings_q, tuple(savings_params))
 
-        loans = self._q("""
+        loans_q = """
             SELECT l.loan_number, lt.type_name, l.principal_amount,
                    l.total_amount, l.amount_paid, l.balance_outstanding,
                    l.start_date, l.end_date, l.status
             FROM loans l
             JOIN loan_types lt ON l.loan_type_id=lt.loan_type_id
             WHERE l.member_id=?
-            ORDER BY l.start_date DESC
-        """, (member_id,))
+        """
+        loans_params = [member_id]
+        if date_from:
+            loans_q += " AND l.disbursement_date >= ?"; loans_params.append(date_from)
+        if date_to:
+            loans_q += " AND l.disbursement_date <= ?"; loans_params.append(date_to)
+        loans_q += " ORDER BY l.start_date DESC"
+        loans = self._q(loans_q, tuple(loans_params))
 
         out    = self._out(f'statement_{member_id}', 'pdf')
         doc    = SimpleDocTemplate(out, pagesize=A4,
                                    leftMargin=2*cm, rightMargin=2*cm,
                                    topMargin=2*cm, bottomMargin=2*cm)
         styles = self._styles()
+        date_range_str = ""
+        if date_from or date_to:
+            date_range_str = f"  |  {date_from or 'All'} to {date_to or 'Present'}"
         story  = self._pdf_header(styles, "Member Statement",
-                                   f"{member_id} — {full_name}")
+                                   f"{member_id} — {full_name}{date_range_str}")
 
         # Member info
         story.append(Paragraph("Member Information", styles['SectionHdr']))
@@ -620,10 +702,10 @@ class ReportGenerator:
         ]
         info_table = Table(info_data, colWidths=[3.5*cm, 5*cm, 3.5*cm, 5*cm])
         info_table.setStyle(TableStyle([
-            ('FONTNAME',  (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTNAME',  (0, 0), (-1, -1), _FONT),
             ('FONTSIZE',  (0, 0), (-1, -1), 9),
-            ('FONTNAME',  (0, 0), (0, -1),  'Helvetica-Bold'),
-            ('FONTNAME',  (2, 0), (2, -1),  'Helvetica-Bold'),
+            ('FONTNAME',  (0, 0), (0, -1),  _FONT_BOLD),
+            ('FONTNAME',  (2, 0), (2, -1),  _FONT_BOLD),
             ('VALIGN',    (0, 0), (-1, -1), 'MIDDLE'),
             ('TOPPADDING',(0, 0), (-1, -1), 3),
             ('BOTTOMPADDING',(0, 0), (-1, -1), 3),
@@ -651,7 +733,7 @@ class ReportGenerator:
             st = Table(s_rows, colWidths=[3.5*cm, 4*cm, 3*cm, 3*cm, 3*cm, 3*cm],
                        repeatRows=1)
             style = self._pdf_table_style(len(s_headers))
-            style.add('FONTNAME',   (0, len(s_rows)-1), (-1, -1), 'Helvetica-Bold')
+            style.add('FONTNAME',   (0, len(s_rows)-1), (-1, -1), _FONT_BOLD)
             style.add('BACKGROUND', (0, len(s_rows)-1), (-1, -1), ACCENT_COLOR)
             style.add('TEXTCOLOR',  (0, len(s_rows)-1), (-1, -1), WHITE)
             st.setStyle(style)
@@ -685,9 +767,14 @@ class ReportGenerator:
     # 5. Transaction Report
     # -------------------------------------------------------------------------
 
-    def transactions_report_pdf(self, start_date: str, end_date: str,
+    def transactions_report_pdf(self, start_date: str = None, end_date: str = None,
+                                  date_from: Optional[str] = None, date_to: Optional[str] = None,
                                   member_id: Optional[str] = None,
                                   station_id: Optional[str] = None) -> str:
+        # support both start_date/end_date and date_from/date_to aliases
+        start_date = start_date or date_from or '2001-01-01'
+        end_date   = end_date   or date_to   or '2099-12-31'
+
         q = """
             SELECT t.transaction_date, t.member_id,
                    m.first_name || ' ' || COALESCE(m.middle_name || ' ','') || m.last_name AS full_name,
@@ -743,9 +830,13 @@ class ReportGenerator:
         doc.build(story)
         return out
 
-    def transactions_report_excel(self, start_date: str, end_date: str,
+    def transactions_report_excel(self, start_date: str = None, end_date: str = None,
+                                     date_from: Optional[str] = None, date_to: Optional[str] = None,
                                     member_id: Optional[str] = None,
                                     station_id: Optional[str] = None) -> str:
+        start_date = start_date or date_from or '2001-01-01'
+        end_date   = end_date   or date_to   or '2099-12-31'
+
         q = """
             SELECT t.transaction_date, t.member_id,
                    m.first_name || ' ' || COALESCE(m.middle_name || ' ','') || m.last_name AS full_name,
