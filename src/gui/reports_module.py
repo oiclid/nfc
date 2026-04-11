@@ -74,6 +74,24 @@ class ReportsModule(QWidget):
             cb.addItem(s['station_name'], s['station_id'])
         return cb
 
+    def _date_range_fields(self, default_from: str = None):
+        from_edit = QDateEdit()
+        from_edit.setFixedHeight(36)
+        from_edit.setCalendarPopup(True)
+        from_edit.setDisplayFormat("dd/MM/yyyy")
+        if default_from:
+            y, m, d = default_from.split('-')
+            from_edit.setDate(QDate(int(y), int(m), int(d)))
+        else:
+            from_edit.setDate(QDate(2001, 1, 1))
+
+        to_edit = QDateEdit()
+        to_edit.setFixedHeight(36)
+        to_edit.setCalendarPopup(True)
+        to_edit.setDisplayFormat("dd/MM/yyyy")
+        to_edit.setDate(QDate.currentDate())
+        return from_edit, to_edit
+
     def _format_combo(self) -> QComboBox:
         cb = QComboBox()
         cb.setFixedHeight(36)
@@ -125,10 +143,13 @@ class ReportsModule(QWidget):
         self.mem_status.setFixedHeight(36)
         self.mem_status.addItems(["Active", "Inactive", "Deceased", "All"])
         self.mem_format  = self._format_combo()
+        self.mem_date_from, self.mem_date_to = self._date_range_fields('2001-01-01')
 
-        form.addRow("Station:", self.mem_station)
-        form.addRow("Status:",  self.mem_status)
-        form.addRow("Format:",  self.mem_format)
+        form.addRow("Station:",    self.mem_station)
+        form.addRow("Status:",     self.mem_status)
+        form.addRow("Joined From:", self.mem_date_from)
+        form.addRow("Joined To:",   self.mem_date_to)
+        form.addRow("Format:",     self.mem_format)
         layout.addWidget(grp)
 
         self.mem_progress = self._progress_bar()
@@ -153,9 +174,12 @@ class ReportsModule(QWidget):
 
         self.sav_station = self._station_combo()
         self.sav_format  = self._format_combo()
+        self.sav_date_from, self.sav_date_to = self._date_range_fields('2001-01-01')
 
-        form.addRow("Station:", self.sav_station)
-        form.addRow("Format:",  self.sav_format)
+        form.addRow("Station:",       self.sav_station)
+        form.addRow("Opened From:",   self.sav_date_from)
+        form.addRow("Opened To:",     self.sav_date_to)
+        form.addRow("Format:",        self.sav_format)
         layout.addWidget(grp)
 
         self.sav_progress = self._progress_bar()
@@ -183,10 +207,13 @@ class ReportsModule(QWidget):
         self.loan_status.setFixedHeight(36)
         self.loan_status.addItems(["Active", "Completed", "All"])
         self.loan_format  = self._format_combo()
+        self.loan_date_from, self.loan_date_to = self._date_range_fields('2001-01-01')
 
-        form.addRow("Station:", self.loan_station)
-        form.addRow("Status:",  self.loan_status)
-        form.addRow("Format:",  self.loan_format)
+        form.addRow("Station:",        self.loan_station)
+        form.addRow("Status:",         self.loan_status)
+        form.addRow("Disbursed From:", self.loan_date_from)
+        form.addRow("Disbursed To:",   self.loan_date_to)
+        form.addRow("Format:",         self.loan_format)
         layout.addWidget(grp)
 
         self.loan_progress = self._progress_bar()
@@ -216,9 +243,12 @@ class ReportsModule(QWidget):
 
         self.stmt_member_lbl = QLabel("—")
         self.stmt_member_lbl.setStyleSheet("color: #7F8C8D;")
+        self.stmt_date_from, self.stmt_date_to = self._date_range_fields('2001-01-01')
 
-        form.addRow("Member ID:", self.stmt_member)
-        form.addRow("Name:",      self.stmt_member_lbl)
+        form.addRow("Member ID:",  self.stmt_member)
+        form.addRow("Name:",       self.stmt_member_lbl)
+        form.addRow("Date From:",  self.stmt_date_from)
+        form.addRow("Date To:",    self.stmt_date_to)
         layout.addWidget(grp)
 
         self.stmt_progress = self._progress_bar()
@@ -404,26 +434,36 @@ class ReportsModule(QWidget):
         station_id = self.mem_station.currentData()
         status     = self.mem_status.currentText()
         fmt        = self.mem_format.currentText()
+        date_from  = self.mem_date_from.date().toString("yyyy-MM-dd")
+        date_to    = self.mem_date_to.date().toString("yyyy-MM-dd")
         sender     = self.sender()
         fn = self.rg.members_list_pdf if fmt == "PDF" else self.rg.members_list_excel
         self._run_worker(self.mem_progress, sender, fn,
-                         station_id=station_id, status=status)
+                         station_id=station_id, status=status,
+                         date_from=date_from, date_to=date_to)
 
     def _generate_savings(self):
         station_id = self.sav_station.currentData()
         fmt        = self.sav_format.currentText()
+        date_from  = self.sav_date_from.date().toString("yyyy-MM-dd")
+        date_to    = self.sav_date_to.date().toString("yyyy-MM-dd")
         sender     = self.sender()
         fn = self.rg.savings_summary_pdf if fmt == "PDF" else self.rg.savings_summary_excel
-        self._run_worker(self.sav_progress, sender, fn, station_id=station_id)
+        self._run_worker(self.sav_progress, sender, fn,
+                         station_id=station_id,
+                         date_from=date_from, date_to=date_to)
 
     def _generate_loans(self):
         station_id = self.loan_station.currentData()
         status     = self.loan_status.currentText()
         fmt        = self.loan_format.currentText()
+        date_from  = self.loan_date_from.date().toString("yyyy-MM-dd")
+        date_to    = self.loan_date_to.date().toString("yyyy-MM-dd")
         sender     = self.sender()
         fn = self.rg.loans_summary_pdf if fmt == "PDF" else self.rg.loans_summary_excel
         self._run_worker(self.loan_progress, sender, fn,
-                         station_id=station_id, status=status)
+                         station_id=station_id, status=status,
+                         date_from=date_from, date_to=date_to)
 
     def _generate_statement(self):
         mid = self.stmt_member.text().strip().upper()
@@ -433,9 +473,12 @@ class ReportsModule(QWidget):
         if not self.db.get_member(mid):
             QMessageBox.warning(self, "Validation", f"Member '{mid}' not found.")
             return
-        sender = self.sender()
+        date_from = self.stmt_date_from.date().toString("yyyy-MM-dd")
+        date_to   = self.stmt_date_to.date().toString("yyyy-MM-dd")
+        sender    = self.sender()
         self._run_worker(self.stmt_progress, sender,
-                         self.rg.member_statement_pdf, mid)
+                         self.rg.member_statement_pdf, mid,
+                         date_from=date_from, date_to=date_to)
 
     def _generate_transactions(self):
         station_id = self.txn_station.currentData()
