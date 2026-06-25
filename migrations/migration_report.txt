@@ -1,6 +1,6 @@
-Migration started: 2026-03-29 09:38:38
-Source: /home/oiclid/code/nfc/data/database.sld
-Target: /home/oiclid/code/nfc/data/nfc_cooperative.db
+Migration started: 2026-06-09 14:01:16
+Source: C:\Users\user\code\nfc_here\nfc\data\database.sld
+Target: C:\Users\user\code\nfc_here\nfc\data\nfc_cooperative.db
 
 Settings:   10 inserted
 Savings types: 4 inserted
@@ -13,4 +13,4 @@ Users:      3/3 migrated
 Bank txns:  6/6 migrated
 
 Migration complete.
-Finished: 2026-03-29 09:38:45
+Finished: 2026-06-09 14:01:26
