@@ -195,3 +195,6 @@ data/database.sld
 data/reports/
 dist/
 build/
+*.code-workspace
+
+*.code-work
