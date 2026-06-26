@@ -75,18 +75,28 @@ class CooperativeFundModule(QWidget):
             debit_btn.setFixedHeight(36)
             debit_btn.setStyleSheet("color: #E74C3C; font-weight: 600;")
             debit_btn.clicked.connect(lambda: self._manual_entry(False))
+            retire_btn = QPushButton("Pay Retirement Benefit")
+            retire_btn.setFixedHeight(36)
+            retire_btn.setStyleSheet("color: #8E44AD; font-weight: 600;")
+            retire_btn.clicked.connect(self._pay_retirement_benefit)
+            other_btn = QPushButton("Record Other Income")
+            other_btn.setFixedHeight(36)
+            other_btn.setStyleSheet("color: #2980B9; font-weight: 600;")
+            other_btn.clicked.connect(self._record_other_income)
             btn_col.addWidget(credit_btn)
             btn_col.addWidget(debit_btn)
+            btn_col.addWidget(retire_btn)
+            btn_col.addWidget(other_btn)
             bal_layout.addLayout(btn_col)
 
         layout.addWidget(self.balance_card)
 
         # Tabs
         self.tabs = QTabWidget()
-        self.tabs.addTab(self._transactions_tab(),  "Fund Transactions")
-        self.tabs.addTab(self._entrance_fees_tab(), "Entrance Fees")
-        self.tabs.addTab(self._annual_fees_tab(),   "Annual Fees")
-        self.tabs.addTab(self._dividends_tab(),     "Dividends")
+        self.tabs.addTab(self._transactions_tab(),   "Fund Transactions")
+        self.tabs.addTab(self._admission_fees_tab(), "Admission Fees")
+        self.tabs.addTab(self._annual_fees_tab(),    "Annual Fees")
+        self.tabs.addTab(self._dividends_tab(),      "Dividends")
         layout.addWidget(self.tabs)
 
     # -------------------------------------------------------------------------
@@ -109,8 +119,10 @@ class CooperativeFundModule(QWidget):
         self.fund_cat_filter = QComboBox()
         self.fund_cat_filter.setFixedHeight(36)
         self.fund_cat_filter.addItem("All Categories", None)
-        for cat in ["Entrance Fee", "Loan Form Fee", "Annual Fee",
-                    "Death Benefit", "Transfer Fee", "Dividend", "Manual"]:
+        for cat in ["Admission Fee", "Readmission Fee", "Withdrawal Fee",
+                    "Death Charge", "Retirement Benefits", "Loan Form Fee",
+                    "Annual Fee", "Transfer Fee", "Other Income",
+                    "Death Benefit", "Dividend", "Manual"]:
             self.fund_cat_filter.addItem(cat, cat)
         self.fund_cat_filter.currentIndexChanged.connect(self._load_fund_transactions)
         filter_row.addWidget(self.fund_cat_filter, 1)
@@ -158,7 +170,7 @@ class CooperativeFundModule(QWidget):
         layout.addWidget(self.fund_summary)
         return w
 
-    def _entrance_fees_tab(self) -> QWidget:
+    def _admission_fees_tab(self) -> QWidget:
         w, layout = QWidget(), QVBoxLayout()
         w.setLayout(layout)
         layout.setContentsMargins(0, 8, 0, 0)
@@ -168,7 +180,7 @@ class CooperativeFundModule(QWidget):
         self.ef_status_filter = QComboBox()
         self.ef_status_filter.setFixedHeight(36)
         self.ef_status_filter.addItems(["Unpaid", "Paid", "All"])
-        self.ef_status_filter.currentIndexChanged.connect(self._load_entrance_fees)
+        self.ef_status_filter.currentIndexChanged.connect(self._load_admission_fees)
         filter_row.addWidget(self.ef_status_filter)
         filter_row.addStretch()
         layout.addLayout(filter_row)
@@ -190,7 +202,7 @@ class CooperativeFundModule(QWidget):
         self.pay_ef_btn.setFixedHeight(34)
         self.pay_ef_btn.setEnabled(False)
         self.pay_ef_btn.setStyleSheet("QPushButton:enabled { color: #27AE60; font-weight: 600; }")
-        self.pay_ef_btn.clicked.connect(self._pay_entrance_fee)
+        self.pay_ef_btn.clicked.connect(self._pay_admission_fee)
         btn_row.addWidget(self.pay_ef_btn)
         btn_row.addStretch()
         layout.addLayout(btn_row)
@@ -320,7 +332,7 @@ class CooperativeFundModule(QWidget):
             "font-size: 24pt; font-weight: bold;"
         )
         self._load_fund_transactions()
-        self._load_entrance_fees()
+        self._load_admission_fees()
         self._load_annual_fees()
         self._load_dividends()
 
@@ -391,7 +403,7 @@ class CooperativeFundModule(QWidget):
             f"Debits: {self._fmt(total_debits)}"
         )
 
-    def _load_entrance_fees(self):
+    def _load_admission_fees(self):
         status = self.ef_status_filter.currentText()
         q = """
             SELECT ef.*, m.first_name, m.last_name
@@ -545,18 +557,18 @@ class CooperativeFundModule(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to record entry:\n{e}")
 
-    def _pay_entrance_fee(self):
+    def _pay_admission_fee(self):
         row = self.ef_table.currentRow()
         if row < 0: return
         mid = self.ef_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
         if not mid: return
-        if not self._confirm("Mark Entrance Fee Paid",
-                             f"Mark entrance fee as paid for {mid}?"):
+        if not self._confirm("Mark Admission Fee Paid",
+                             f"Mark admission fee as paid for {mid}?"):
             return
         try:
             self.db.pay_entrance_fee(mid, self.user['username'])
             self.db.commit()
-            self._load_entrance_fees()
+            self._load_admission_fees()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed:\n{e}")
 
@@ -584,6 +596,66 @@ class CooperativeFundModule(QWidget):
                 self, "Annual Fee Charged",
                 f"Annual fee charged to {charged} members for {year}."
             )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed:\n{e}")
+
+    def _pay_retirement_benefit(self):
+        amount = float(self.db.get_setting('retirement_benefit_fee_amount') or 0)
+        if amount <= 0:
+            QMessageBox.warning(
+                self, "Not Configured",
+                "Retirement benefit amount is set to zero.\n"
+                "Configure it under Settings \u2192 Fees first."
+            )
+            return
+        from PyQt6.QtWidgets import QInputDialog
+        member_id, ok = QInputDialog.getText(self, "Pay Retirement Benefit", "Enter Member ID:")
+        if not ok or not member_id.strip():
+            return
+        member_id = member_id.strip()
+        member = self.db.get_member(member_id)
+        if not member:
+            QMessageBox.warning(self, "Not Found", f"Member '{member_id}' not found.")
+            return
+        name = f"{member['first_name']} {member['last_name']}"
+        if not self._confirm(
+            "Confirm Retirement Benefit",
+            f"Pay retirement benefit of {self._fmt(amount)} to {name} ({member_id})?\n\n"
+            "This will debit the cooperative fund."
+        ):
+            return
+        try:
+            self.db.charge_retirement_benefit(member_id, self.user['username'])
+            self.db.commit()
+            self.refresh()
+            QMessageBox.information(
+                self, "Retirement Benefit Paid",
+                f"Retirement benefit of {self._fmt(amount)} paid for {name}."
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed:\n{e}")
+
+    def _record_other_income(self):
+        dlg = OtherIncomeDialog(self.currency, parent=self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        data = dlg.data()
+        if not self._confirm(
+            "Record Other Income",
+            f"Credit {self._fmt(data['amount'])} to the fund?\n\n"
+            f"Description: {data['description']}"
+        ):
+            return
+        try:
+            self.db.record_other_income(
+                data['amount'], data['description'],
+                member_id=data.get('member_id') or None,
+                created_by=self.user['username']
+            )
+            self.db.commit()
+            self.refresh()
+            QMessageBox.information(self, "Income Recorded",
+                                    f"{self._fmt(data['amount'])} recorded as other income.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed:\n{e}")
 
@@ -632,6 +704,69 @@ class CooperativeFundModule(QWidget):
             )
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed:\n{e}")
+
+
+# ---------------------------------------------------------------------------
+# Other income dialog
+# ---------------------------------------------------------------------------
+
+class OtherIncomeDialog(QDialog):
+    def __init__(self, currency: str, parent=None):
+        super().__init__(parent)
+        self.currency = currency
+        self.setWindowTitle("Record Other Income")
+        self.setFixedWidth(400)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 16)
+        layout.setSpacing(12)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self.amount_input = QDoubleSpinBox()
+        self.amount_input.setFixedHeight(36)
+        self.amount_input.setRange(0.01, 999_999_999)
+        self.amount_input.setDecimals(2)
+        self.amount_input.setPrefix(f"{self.currency} ")
+        self.amount_input.setSingleStep(1000)
+
+        self.member_input = QLineEdit()
+        self.member_input.setFixedHeight(36)
+        self.member_input.setPlaceholderText("Optional")
+
+        self.desc_input = QLineEdit()
+        self.desc_input.setFixedHeight(36)
+        self.desc_input.setPlaceholderText("Required")
+
+        form.addRow("Amount:",      self.amount_input)
+        form.addRow("Member ID:",   self.member_input)
+        form.addRow("Description:", self.desc_input)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok |
+            QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._validate)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def data(self) -> dict:
+        return {
+            'amount':      self.amount_input.value(),
+            'member_id':   self.member_input.text().strip() or None,
+            'description': self.desc_input.text().strip(),
+        }
+
+    def _validate(self):
+        if not self.desc_input.text().strip():
+            QMessageBox.warning(self, "Validation", "Description is required.")
+            return
+        self.accept()
 
 
 # ---------------------------------------------------------------------------

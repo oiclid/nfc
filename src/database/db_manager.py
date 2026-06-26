@@ -214,7 +214,7 @@ class DatabaseManager:
              created_by)
         )
         self.update_setting('next_member_number', str(next_num + 1))
-        self.charge_entrance_fee(member_id, created_by)
+        self.charge_admission_fee(member_id, created_by)
         self.commit()
         return member_id
 
@@ -252,13 +252,7 @@ class DatabaseManager:
             "UPDATE members SET is_active=1, modified_by=?, modified_date=? WHERE member_id=?",
             (modified_by, datetime.now().isoformat(), member_id)
         )
-        self.commit()
-
-    def reactivate_member(self, member_id: str, modified_by: str):
-        self.execute(
-            "UPDATE members SET is_active=1, modified_by=?, modified_date=? WHERE member_id=?",
-            (modified_by, datetime.now().isoformat(), member_id)
-        )
+        self.charge_readmission_fee(member_id, modified_by)
         self.commit()
 
     def mark_member_deceased(self, member_id: str, deceased_date: str, modified_by: str):
@@ -587,50 +581,6 @@ class DatabaseManager:
         )
 
     # -------------------------------------------------------------------------
-    # Death Benefits
-    # -------------------------------------------------------------------------
-
-    def process_death_benefit(self, deceased_member_id: str,
-                              processed_by: str) -> Dict:
-        if self.get_setting('death_benefit_enabled') != '1':
-            raise ValueError("Death benefit system is disabled")
-        charge         = float(self.get_setting('death_benefit_amount') or 0)
-        active_members = self.get_all_members(active_only=True)
-        total_benefit  = len(active_members) * charge
-
-        with self.transaction():
-            cursor = self.execute(
-                """INSERT INTO death_benefits
-                   (member_id, benefit_amount, charge_per_member,
-                    members_charged, processed_by, processed_date)
-                   VALUES (?,?,?,?,?,?)""",
-                (deceased_member_id, total_benefit, charge,
-                 len(active_members), processed_by, date.today().isoformat())
-            )
-            benefit_id = cursor.lastrowid
-            for m in active_members:
-                self.execute(
-                    """INSERT INTO death_benefit_charges
-                       (death_benefit_id, member_id, charge_amount, processed_date)
-                       VALUES (?,?,?,?)""",
-                    (benefit_id, m['member_id'], charge, date.today().isoformat())
-                )
-            self.mark_member_deceased(
-                deceased_member_id, date.today().isoformat(), processed_by
-            )
-        return {
-            'benefit_id':        benefit_id,
-            'total_benefit':     total_benefit,
-            'members_charged':   len(active_members),
-            'charge_per_member': charge
-        }
-
-    def get_death_benefits(self) -> List[Dict]:
-        return self.fetchall(
-            "SELECT * FROM death_benefits ORDER BY processed_date DESC"
-        )
-
-    # -------------------------------------------------------------------------
     # Withdrawal Benefits
     # -------------------------------------------------------------------------
 
@@ -775,11 +725,11 @@ class DatabaseManager:
                 self._debit_fund(amount, category, description, created_by=created_by)
 
     # -------------------------------------------------------------------------
-    # Entrance Fees
+    # Admission Fees
     # -------------------------------------------------------------------------
 
-    def charge_entrance_fee(self, member_id: str, created_by: str):
-        amount = float(self.get_setting('entrance_fee_amount') or 0)
+    def charge_admission_fee(self, member_id: str, created_by: str):
+        amount = float(self.get_setting('admission_fee_amount') or 0)
         from datetime import date
         self.execute(
             """INSERT INTO entrance_fees (member_id, amount, is_paid, due_date)
@@ -788,8 +738,8 @@ class DatabaseManager:
         )
         if amount > 0:
             self._credit_fund(
-                amount, 'Entrance Fee',
-                f"Entrance fee — {member_id}",
+                amount, 'Admission Fee',
+                f"Admission fee — {member_id}",
                 member_id=member_id, created_by=created_by
             )
 
@@ -805,10 +755,106 @@ class DatabaseManager:
             (date.today().isoformat(), paid_by, fee['fee_id'])
         )
 
-    def get_entrance_fee_status(self, member_id: str) -> Optional[Dict]:
+    def get_admission_fee_status(self, member_id: str) -> Optional[Dict]:
         return self.fetchone(
             "SELECT * FROM entrance_fees WHERE member_id=? ORDER BY fee_id DESC LIMIT 1",
             (member_id,)
+        )
+
+    # -------------------------------------------------------------------------
+    # Withdrawal Fee
+    # -------------------------------------------------------------------------
+
+    def charge_withdrawal_fee(self, member_id: str, created_by: str):
+        amount = float(self.get_setting('withdrawal_fee_amount') or 0)
+        if amount <= 0:
+            return
+        from datetime import date
+        self._credit_fund(
+            amount, 'Withdrawal Fee',
+            f"Withdrawal fee — {member_id}",
+            member_id=member_id, created_by=created_by
+        )
+
+    # -------------------------------------------------------------------------
+    # Death Charge (charged to all active members when someone dies)
+    # -------------------------------------------------------------------------
+
+    def charge_death_charge_all(self, deceased_member_id: str,
+                                deceased_name: str, created_by: str) -> int:
+        amount  = float(self.get_setting('death_charge_amount') or 0)
+        members = self.get_all_members(active_only=True)
+        from datetime import date
+        charged = 0
+        with self.transaction():
+            for m in members:
+                if amount > 0:
+                    self._credit_fund(
+                        amount, 'Death Charge',
+                        f"Death charge — {deceased_name} — {m['member_id']}",
+                        member_id=m['member_id'], created_by=created_by
+                    )
+                charged += 1
+        return charged
+
+    # -------------------------------------------------------------------------
+    # Death Benefit (paid into the deceased member's account)
+    # -------------------------------------------------------------------------
+
+    def pay_death_benefit(self, deceased_member_id: str,
+                          deceased_name: str, created_by: str):
+        amount = float(self.get_setting('death_benefit_fee_amount') or 0)
+        if amount <= 0:
+            return
+        from datetime import date
+        self._debit_fund(
+            amount, 'Death Benefit',
+            f"Death benefit paid — {deceased_name}",
+            member_id=deceased_member_id, created_by=created_by
+        )
+
+    # -------------------------------------------------------------------------
+    # Readmission Fee
+    # -------------------------------------------------------------------------
+
+    def charge_readmission_fee(self, member_id: str, created_by: str):
+        amount = float(self.get_setting('readmission_fee_amount') or 0)
+        if amount <= 0:
+            return
+        from datetime import date
+        self._credit_fund(
+            amount, 'Readmission Fee',
+            f"Readmission fee — {member_id}",
+            member_id=member_id, created_by=created_by
+        )
+
+    # -------------------------------------------------------------------------
+    # Retirement Benefits
+    # -------------------------------------------------------------------------
+
+    def charge_retirement_benefit(self, member_id: str, created_by: str):
+        amount = float(self.get_setting('retirement_benefit_fee_amount') or 0)
+        if amount <= 0:
+            return
+        from datetime import date
+        self._debit_fund(
+            amount, 'Retirement Benefits',
+            f"Retirement benefit — {member_id}",
+            member_id=member_id, created_by=created_by
+        )
+
+    # -------------------------------------------------------------------------
+    # Other Income
+    # -------------------------------------------------------------------------
+
+    def record_other_income(self, amount: float, description: str,
+                            member_id: str = None, created_by: str = 'system'):
+        if amount <= 0:
+            return
+        self._credit_fund(
+            amount, 'Other Income',
+            description or 'Other income',
+            member_id=member_id, created_by=created_by
         )
 
     # -------------------------------------------------------------------------
@@ -880,12 +926,13 @@ class DatabaseManager:
         if self.get_setting('death_benefit_enabled') != '1':
             raise ValueError("Death benefit system is disabled")
 
-        charge         = float(self.get_setting('death_benefit_amount') or 0)
+        charge         = float(self.get_setting('death_charge_amount') or 0)
+        benefit_payout = float(self.get_setting('death_benefit_fee_amount') or 0)
         notation_tmpl  = self.get_setting('death_benefit_notation') or \
                          'Death benefit charge — {member_name}'
         notation       = notation_tmpl.replace('{member_name}', deceased_name)
         active_members = self.get_all_members(active_only=True)
-        total_benefit  = len(active_members) * charge
+        total_collected = len(active_members) * charge
 
         from datetime import date
         with self.transaction():
@@ -894,7 +941,7 @@ class DatabaseManager:
                    (member_id, benefit_amount, charge_per_member,
                     members_charged, processed_by, processed_date)
                    VALUES (?,?,?,?,?,?)""",
-                (deceased_member_id, total_benefit, charge,
+                (deceased_member_id, total_collected, charge,
                  len(active_members), processed_by, date.today().isoformat())
             )
             benefit_id = cursor.lastrowid
@@ -907,7 +954,6 @@ class DatabaseManager:
                     (benefit_id, m['member_id'], charge, date.today().isoformat())
                 )
                 if charge > 0:
-                    # debit from premium savings if available
                     acct = self.fetchone(
                         """SELECT sa.account_id, sa.current_balance
                            FROM savings_accounts sa
@@ -925,7 +971,7 @@ class DatabaseManager:
                         )
                         self._record_transaction(
                             member_id=m['member_id'],
-                            transaction_type='Death Benefit Charge',
+                            transaction_type='Death Charge',
                             account_type='Savings',
                             account_id=str(acct['account_id']),
                             amount=charge,
@@ -935,11 +981,21 @@ class DatabaseManager:
                             created_by=processed_by
                         )
 
-            # credit fund
+            # Credit fund from death charges collected
             if charge > 0:
                 self._credit_fund(
-                    total_benefit, 'Death Benefit',
-                    f"Death benefit collected — {deceased_name}",
+                    total_collected, 'Death Charge',
+                    f"Death charge collected — {deceased_name}",
+                    member_id=deceased_member_id,
+                    reference_id=str(benefit_id),
+                    created_by=processed_by
+                )
+
+            # Debit fund for death benefit paid to deceased's account
+            if benefit_payout > 0:
+                self._debit_fund(
+                    benefit_payout, 'Death Benefit',
+                    f"Death benefit paid — {deceased_name}",
                     member_id=deceased_member_id,
                     reference_id=str(benefit_id),
                     created_by=processed_by
@@ -947,11 +1003,16 @@ class DatabaseManager:
 
         return {
             'benefit_id':        benefit_id,
-            'total_benefit':     total_benefit,
+            'total_collected':   total_collected,
             'members_charged':   len(active_members),
             'charge_per_member': charge,
-            'notation':          notation,
+            'benefit_payout':    benefit_payout,
         }
+
+    def get_death_benefits(self) -> List[Dict]:
+        return self.fetchall(
+            "SELECT * FROM death_benefits ORDER BY processed_date DESC"
+        )
 
     # -------------------------------------------------------------------------
     # Transfer Fee

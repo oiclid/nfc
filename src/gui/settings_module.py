@@ -168,15 +168,27 @@ class SettingsModule(QWidget):
             s.setSingleStep(500)
             return s
 
-        self.entrance_fee  = fee_spin()
-        self.loan_fee      = fee_spin()
-        self.annual_fee    = fee_spin()
-        self.transfer_fee  = fee_spin()
+        self.admission_fee    = fee_spin()
+        self.readmission_fee  = fee_spin()
+        self.withdrawal_fee   = fee_spin()
+        self.death_charge     = fee_spin()
+        self.retirement_fee   = fee_spin()
+        self.loan_fee         = fee_spin()
+        self.annual_fee       = fee_spin()
+        self.transfer_fee     = fee_spin()
+        self.other_income     = fee_spin()
+        self.death_benefit    = fee_spin()
 
-        form.addRow("Entrance Fee:", self.entrance_fee)
-        form.addRow("Loan Form Fee:", self.loan_fee)
+        form.addRow("Admission Fee:", self.admission_fee)
+        form.addRow("Readmission Fee:", self.readmission_fee)
+        form.addRow("Withdrawal Fee:", self.withdrawal_fee)
+        form.addRow("Death Charge (charged to all members):", self.death_charge)
+        form.addRow("Retirement Benefits:", self.retirement_fee)
+        form.addRow("Sales of Loan Form:", self.loan_fee)
         form.addRow("Annual Fee:", self.annual_fee)
         form.addRow("Transfer Fee:", self.transfer_fee)
+        form.addRow("Other Income:", self.other_income)
+        form.addRow("Death Benefit (paid to deceased account):", self.death_benefit)
 
         layout.addWidget(grp)
 
@@ -843,10 +855,16 @@ class SettingsModule(QWidget):
 
 
     def _load_fee_settings(self):
-        self.entrance_fee.setValue(float(self.db.get_setting('entrance_fee_amount') or 0))
+        self.admission_fee.setValue(float(self.db.get_setting('admission_fee_amount') or 0))
+        self.readmission_fee.setValue(float(self.db.get_setting('readmission_fee_amount') or 0))
+        self.withdrawal_fee.setValue(float(self.db.get_setting('withdrawal_fee_amount') or 0))
+        self.death_charge.setValue(float(self.db.get_setting('death_charge_amount') or 0))
+        self.retirement_fee.setValue(float(self.db.get_setting('retirement_benefit_fee_amount') or 0))
         self.loan_fee.setValue(float(self.db.get_setting('loan_form_fee_amount') or 0))
         self.annual_fee.setValue(float(self.db.get_setting('annual_fee_amount') or 0))
         self.transfer_fee.setValue(float(self.db.get_setting('transfer_fee_amount') or 0))
+        self.other_income.setValue(float(self.db.get_setting('other_income_amount') or 0))
+        self.death_benefit.setValue(float(self.db.get_setting('death_benefit_fee_amount') or 0))
         self.death_notation.setText(
             self.db.get_setting('death_benefit_notation') or
             'Death benefit charge — {member_name}'
@@ -863,10 +881,16 @@ class SettingsModule(QWidget):
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         u = self.user['username']
-        self.db.update_setting('entrance_fee_amount',  f"{self.entrance_fee.value():.2f}", u)
-        self.db.update_setting('loan_form_fee_amount', f"{self.loan_fee.value():.2f}", u)
-        self.db.update_setting('annual_fee_amount',    f"{self.annual_fee.value():.2f}", u)
-        self.db.update_setting('transfer_fee_amount',  f"{self.transfer_fee.value():.2f}", u)
+        self.db.update_setting('admission_fee_amount',        f"{self.admission_fee.value():.2f}", u)
+        self.db.update_setting('readmission_fee_amount',      f"{self.readmission_fee.value():.2f}", u)
+        self.db.update_setting('withdrawal_fee_amount',       f"{self.withdrawal_fee.value():.2f}", u)
+        self.db.update_setting('death_charge_amount',         f"{self.death_charge.value():.2f}", u)
+        self.db.update_setting('retirement_benefit_fee_amount', f"{self.retirement_fee.value():.2f}", u)
+        self.db.update_setting('loan_form_fee_amount',        f"{self.loan_fee.value():.2f}", u)
+        self.db.update_setting('annual_fee_amount',           f"{self.annual_fee.value():.2f}", u)
+        self.db.update_setting('transfer_fee_amount',         f"{self.transfer_fee.value():.2f}", u)
+        self.db.update_setting('other_income_amount',         f"{self.other_income.value():.2f}", u)
+        self.db.update_setting('death_benefit_fee_amount',    f"{self.death_benefit.value():.2f}", u)
         self.db.update_setting('death_benefit_notation', self.death_notation.text().strip(), u)
         QMessageBox.information(self, "Saved", "Fee settings saved.")
 

@@ -452,6 +452,20 @@ def migrate():
         ('organization_name',               'Nigerian Film Corporation'),
         ('currency_symbol',                 '₦'),
         ('date_format',                     'YYYY-MM-DD'),
+        ('admission_fee_amount',            '0.00'),
+        ('readmission_fee_amount',          '0.00'),
+        ('withdrawal_fee_amount',           '0.00'),
+        ('death_charge_amount',             '0.00'),
+        ('retirement_benefit_fee_amount',   '0.00'),
+        ('other_income_amount',             '0.00'),
+        ('death_benefit_fee_amount',        '0.00'),
+        ('loan_form_fee_amount',            '0.00'),
+        ('annual_fee_amount',               '0.00'),
+        ('transfer_fee_amount',             '0.00'),
+        ('death_benefit_notation',          'Death benefit charge — {member_name}'),
+        ('dividend_distribution_method',    'percentage'),
+        ('dividend_percentage',             '0.00'),
+        ('dividend_fixed_amount',           '0.00'),
     ]
     dest.executemany(
         "INSERT INTO system_settings (setting_key, setting_value) VALUES (?,?)",
@@ -726,6 +740,25 @@ def migrate():
         except Exception as e:
             log(f"  SKIP bank txn {bt['TransactionID']}: {e}")
     log(f"Bank txns:  {bt_ok}/{len(btxns)} migrated")
+
+    # Mark all bundled migrations as applied so the auto-runner skips them
+    # on first launch. These files were created before or alongside this
+    # migration script and their work is already covered by the schema above.
+    bundled_migrations = [
+        '0001_wipe_legacy_users.py',
+        '0002_purge_members.py',
+        '0003_migrate_historical_transactions.py',
+        '0004_cooperative_fund.py',
+        '0005_dedup_loans.py',
+        '0006_dedup_loans_by_amount.py',
+        '0007_mark_defaulted_loans.py',
+        '0008_rename_fees.py',
+    ]
+    for name in bundled_migrations:
+        dest.execute(
+            "INSERT OR IGNORE INTO migrations (name) VALUES (?)", (name,)
+        )
+    log(f"Migrations: {len(bundled_migrations)} pre-marked as applied")
 
     dest.commit()
     src.close()

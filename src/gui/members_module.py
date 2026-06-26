@@ -400,14 +400,16 @@ class MembersModule(QWidget):
                 result = self.db.process_death_benefit(
                     mid, name, self.user['username']
                 )
+                currency = self.db.get_setting('currency_symbol') or '₦'
+                lines = []
                 if result['charge_per_member'] > 0:
-                    currency = self.db.get_setting('currency_symbol') or '₦'
-                    benefit_msg = (
-                        f"\n\nDeath benefit processed:\n"
-                        f"  Members charged: {result['members_charged']}\n"
-                        f"  Amount per member: {currency}{result['charge_per_member']:,.2f}\n"
-                        f"  Total collected: {currency}{result['total_benefit']:,.2f}"
-                    )
+                    lines.append(f"  Death charge per member: {currency}{result['charge_per_member']:,.2f}")
+                    lines.append(f"  Members charged: {result['members_charged']}")
+                    lines.append(f"  Total collected: {currency}{result['total_collected']:,.2f}")
+                if result['benefit_payout'] > 0:
+                    lines.append(f"  Death benefit paid to account: {currency}{result['benefit_payout']:,.2f}")
+                if lines:
+                    benefit_msg = "\n\nDeath benefit processed:\n" + "\n".join(lines)
             except Exception:
                 pass  # death benefit disabled or zero amount
             self.refresh()

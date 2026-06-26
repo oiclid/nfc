@@ -521,6 +521,8 @@ class SavingsModule(QWidget):
                      'description':    data.get('description', 'Savings withdrawal')},
                     self.user['username']
                 )
+                self.db.charge_withdrawal_fee(account['member_id'], self.user['username'])
+                self.db.commit()
                 QMessageBox.information(
                     self, "Withdrawal Successful",
                     f"Withdrew {self._fmt(data['amount'])} from {account['account_number']}."
