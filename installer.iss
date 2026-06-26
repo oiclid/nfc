@@ -32,7 +32,7 @@ Source: "dist\NFC-Cooperative\*"; DestDir: "{app}"; Flags: ignoreversion recurse
 [Icons]
 Name: "{group}\NFC Cooperative";           Filename: "{app}\NFC-Cooperative.exe"
 Name: "{group}\Uninstall NFC Cooperative"; Filename: "{uninstallexe}"
-Name: "{commondesktop}\NFC Cooperative";   Filename: "{app}\NFC-Cooperative.exe"; Tasks: desktopicon
+Name: "{userdesktop}\NFC Cooperative";   Filename: "{app}\NFC-Cooperative.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\NFC-Cooperative.exe"; Description: "Launch NFC Cooperative"; Flags: nowait postinstall skipifsilent
