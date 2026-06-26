@@ -1,4 +1,4 @@
-Migration started: 2026-06-26 11:33:04
+Migration started: 2026-06-26 13:29:16
 Source: C:\Users\user\code\nfc_here\nfc\data\database.sld
 Target: C:\Users\user\code\nfc_here\nfc\data\nfc_cooperative.db
 
@@ -22,4 +22,4 @@ Bank txns:  6/6 migrated
 Migrations: 8 applied
 
 Migration complete.
-Finished: 2026-06-26 11:33:25
+Finished: 2026-06-26 13:29:36
