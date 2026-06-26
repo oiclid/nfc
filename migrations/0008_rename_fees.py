@@ -24,8 +24,13 @@ def up(conn):
                 (key, val)
             )
 
-    conn.execute(
-        "UPDATE cooperative_fund_transactions SET category='Admission Fee' WHERE category='Entrance Fee'"
-    )
+    # Only rename categories if the table already exists (it's created by 0004)
+    table_exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='cooperative_fund_transactions'"
+    ).fetchone()
+    if table_exists:
+        conn.execute(
+            "UPDATE cooperative_fund_transactions SET category='Admission Fee' WHERE category='Entrance Fee'"
+        )
 
-    print("  [0005] Fee settings seeded and fund transaction categories updated")
+    print("  [0008] Fee settings seeded and fund transaction categories updated")
