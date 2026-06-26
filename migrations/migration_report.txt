@@ -1,8 +1,8 @@
-Migration started: 2026-06-09 14:01:16
+Migration started: 2026-06-26 07:59:39
 Source: C:\Users\user\code\nfc_here\nfc\data\database.sld
 Target: C:\Users\user\code\nfc_here\nfc\data\nfc_cooperative.db
 
-Settings:   10 inserted
+Settings:   24 inserted
 Savings types: 4 inserted
 Loan types: 8 inserted
 Stations:   3/3 migrated
@@ -11,6 +11,7 @@ Savings accounts: 433 created, 1 skipped
 Loans:      8451/8451 migrated, 0 skipped
 Users:      3/3 migrated
 Bank txns:  6/6 migrated
+Migrations: 8 pre-marked as applied
 
 Migration complete.
-Finished: 2026-06-09 14:01:26
+Finished: 2026-06-26 07:59:51
