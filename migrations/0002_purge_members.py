@@ -27,10 +27,10 @@ PURGE_IDS = [
     'NFC0314','NFC0320','NFC0321','NFC0324','NFC0330','NFC0331',
 ]
 
-CHILD_TABLES = [
+# Tables with a member_id column (besides members itself)
+REF_TABLES = [
     'savings_accounts',
     'loans',
-    'loan_repayments',
     'transactions',
     'dividends',
     'death_benefit_charges',
@@ -39,12 +39,41 @@ CHILD_TABLES = [
 ]
 
 
+def _rename_member(conn, old_id: str, new_id: str):
+    """Rename a single member ID everywhere."""
+    for table in REF_TABLES:
+        try:
+            conn.execute(
+                f"UPDATE {table} SET member_id=? WHERE member_id=?",
+                (new_id, old_id)
+            )
+        except Exception:
+            pass
+
+    # loan_repayments has no member_id — it joins via loans, already updated above
+    # via savings_accounts.account_number text embed
+    try:
+        conn.execute(
+            """UPDATE savings_accounts
+               SET account_number = REPLACE(account_number, ?, ?)
+               WHERE member_id=?""",
+            (old_id, new_id, new_id)
+        )
+    except Exception:
+        pass
+
+    conn.execute(
+        "UPDATE members SET member_id=?, registration_number=? WHERE member_id=?",
+        (new_id, new_id, old_id)
+    )
+
+
 def up(conn: sqlite3.Connection):
     conn.execute("PRAGMA foreign_keys = OFF")
 
     ph = ','.join('?' * len(PURGE_IDS))
 
-    # Delete loan_repayments linked via loans (not directly by member_id)
+    # ── 1. Delete loan_repayments linked via loans ────────────────────────
     loan_ids = [r[0] for r in conn.execute(
         f"SELECT loan_id FROM loans WHERE member_id IN ({ph})", PURGE_IDS
     ).fetchall()]
@@ -52,58 +81,42 @@ def up(conn: sqlite3.Connection):
         lph = ','.join('?' * len(loan_ids))
         conn.execute(f"DELETE FROM loan_repayments WHERE loan_id IN ({lph})", loan_ids)
 
-    # Delete all child records
-    for table in CHILD_TABLES:
+    # ── 2. Delete child records for purged members ────────────────────────
+    for table in REF_TABLES:
         try:
             conn.execute(f"DELETE FROM {table} WHERE member_id IN ({ph})", PURGE_IDS)
         except Exception:
             pass
 
-    # Delete the members
+    # ── 3. Delete the purged members ─────────────────────────────────────
     conn.execute(f"DELETE FROM members WHERE member_id IN ({ph})", PURGE_IDS)
 
-    # Renumber remaining members sequentially
-    remaining = conn.execute(
+    # ── 4. Build the rename map ───────────────────────────────────────────
+    remaining = [r[0] for r in conn.execute(
         "SELECT member_id FROM members ORDER BY member_id"
-    ).fetchall()
+    ).fetchall()]
 
-    id_map = {}
-    for i, (old_id,) in enumerate(remaining, 1):
+    id_map = {}   # old_id -> new_id, only entries that actually change
+    for i, old_id in enumerate(remaining, 1):
         new_id = f"NFC{i:04d}"
         if old_id != new_id:
             id_map[old_id] = new_id
 
-    # Update child tables and members in order
-    ref_tables = [
-        'savings_accounts', 'loans', 'loan_repayments', 'transactions',
-        'dividends', 'death_benefit_charges', 'withdrawal_benefits',
-        'member_transfers',
-    ]
-    for old_id, new_id in id_map.items():
-        for table in ref_tables:
-            try:
-                conn.execute(
-                    f"UPDATE {table} SET member_id=? WHERE member_id=?",
-                    (new_id, old_id)
-                )
-            except Exception:
-                pass
-        # update account_number text field to match new member_id
-        try:
-            conn.execute(
-                """UPDATE savings_accounts
-                   SET account_number = REPLACE(account_number, ?, ?)
-                   WHERE member_id=?""",
-                (old_id, new_id, new_id)
-            )
-        except Exception:
-            pass
-        conn.execute(
-            "UPDATE members SET member_id=?, registration_number=? WHERE member_id=?",
-            (new_id, new_id, old_id)
-        )
+    if id_map:
+        # ── 5. Pass A: rename every affected member to a collision-safe temp ID
+        #    e.g. NFC0006 -> __TMP__NFC0006
+        #    This avoids PK collisions when e.g. NFC0009->NFC0006 while NFC0006
+        #    hasn't been moved yet.
+        for old_id in id_map:
+            tmp_id = f"__TMP__{old_id}"
+            _rename_member(conn, old_id, tmp_id)
 
-    # Update next_member_number
+        # ── 6. Pass B: rename from temp IDs to final sequential IDs
+        for old_id, new_id in id_map.items():
+            tmp_id = f"__TMP__{old_id}"
+            _rename_member(conn, tmp_id, new_id)
+
+    # ── 7. Update next_member_number setting ─────────────────────────────
     new_count = len(remaining)
     conn.execute(
         "UPDATE system_settings SET setting_value=? WHERE setting_key='next_member_number'",
