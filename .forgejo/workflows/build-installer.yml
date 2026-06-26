@@ -24,8 +24,11 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Generate seed database
+        run: python migrations/migrate.py
+
       - name: Build with PyInstaller
-        run: pyinstaller nfc.spec
+        run: pyinstaller NFC-Cooperative.spec --noconfirm
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
@@ -40,11 +43,10 @@ jobs:
           path: dist\installer\NFC-Cooperative-Setup-v2.0.0.exe
 
       - name: Attach installer to release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: forgejo/release-action@v1
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: dist\installer\NFC-Cooperative-Setup-v2.0.0.exe
-          asset_name: NFC-Cooperative-Setup-v2.0.0.exe
-          asset_content_type: application/octet-stream
+          direction: upload
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
+          release-dir: dist/installer
+          release-notes: "Windows installer built automatically from tag ${{ github.ref_name }}."
