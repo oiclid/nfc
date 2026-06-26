@@ -1,4 +1,4 @@
-Migration started: 2026-06-26 07:59:39
+Migration started: 2026-06-26 11:33:04
 Source: C:\Users\user\code\nfc_here\nfc\data\database.sld
 Target: C:\Users\user\code\nfc_here\nfc\data\nfc_cooperative.db
 
@@ -11,7 +11,15 @@ Savings accounts: 433 created, 1 skipped
 Loans:      8451/8451 migrated, 0 skipped
 Users:      3/3 migrated
 Bank txns:  6/6 migrated
-Migrations: 8 pre-marked as applied
+  ran: 0001_wipe_legacy_users.py
+  ran: 0002_purge_members.py
+  ran: 0003_migrate_historical_transactions.py
+  ran: 0004_cooperative_fund.py
+  ran: 0005_dedup_loans.py
+  ran: 0006_dedup_loans_by_amount.py
+  ran: 0007_mark_defaulted_loans.py
+  ran: 0008_rename_fees.py
+Migrations: 8 applied
 
 Migration complete.
-Finished: 2026-06-26 07:59:51
+Finished: 2026-06-26 11:33:25

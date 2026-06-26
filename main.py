@@ -42,13 +42,33 @@ class NFCApp(QApplication):
 
     def _init_db(self):
         if not os.path.isfile(DB_PATH):
-            QMessageBox.critical(
-                None, "Database Error",
-                f"Database not found:\n{DB_PATH}\n\n"
-                "Run the migration script first:\n"
-                "  python migrations/migrate.py"
-            )
-            sys.exit(1)
+            # Auto-run the one-time migration if the legacy database.sld exists
+            sld_path = os.path.join(os.path.dirname(DB_PATH), 'database.sld')
+            if os.path.isfile(sld_path):
+                try:
+                    import importlib.util
+                    migrate_script = os.path.normpath(
+                        os.path.join(MIGRATIONS_DIR, 'migrate.py')
+                    )
+                    spec   = importlib.util.spec_from_file_location('migrate', migrate_script)
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    module.migrate()
+                except Exception as e:
+                    QMessageBox.critical(
+                        None, "Setup Error",
+                        f"Failed to initialise database from database.sld:\n{e}\n\n"
+                        "Try running manually:\n  python migrations/migrate.py"
+                    )
+                    sys.exit(1)
+            else:
+                QMessageBox.critical(
+                    None, "Database Error",
+                    f"Database not found:\n{DB_PATH}\n\n"
+                    "Run the migration script first:\n"
+                    "  python migrations/migrate.py"
+                )
+                sys.exit(1)
         try:
             self.db_manager = DatabaseManager(DB_PATH)
         except Exception as e:
