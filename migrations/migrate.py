@@ -741,9 +741,8 @@ def migrate():
             log(f"  SKIP bank txn {bt['TransactionID']}: {e}")
     log(f"Bank txns:  {bt_ok}/{len(btxns)} migrated")
 
-    # Mark all bundled migrations as applied so the auto-runner skips them
-    # on first launch. These files were created before or alongside this
-    # migration script and their work is already covered by the schema above.
+    # Run all bundled migrations in order against the new DB
+    import importlib.util
     bundled_migrations = [
         '0001_wipe_legacy_users.py',
         '0002_purge_members.py',
@@ -754,11 +753,22 @@ def migrate():
         '0007_mark_defaulted_loans.py',
         '0008_rename_fees.py',
     ]
+    migrations_dir = os.path.dirname(os.path.abspath(__file__))
     for name in bundled_migrations:
-        dest.execute(
-            "INSERT OR IGNORE INTO migrations (name) VALUES (?)", (name,)
-        )
-    log(f"Migrations: {len(bundled_migrations)} pre-marked as applied")
+        filepath = os.path.join(migrations_dir, name)
+        spec   = importlib.util.spec_from_file_location(name[:-3], filepath)
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+            module.up(dest)
+            dest.execute("INSERT OR IGNORE INTO migrations (name) VALUES (?)", (name,))
+            dest.commit()
+            log(f"  ran: {name}")
+        except Exception as e:
+            dest.rollback()
+            log(f"  FAILED: {name} — {e}")
+            raise
+    log(f"Migrations: {len(bundled_migrations)} applied")
 
     dest.commit()
     src.close()
