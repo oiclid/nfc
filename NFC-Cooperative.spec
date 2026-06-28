@@ -3,32 +3,33 @@
 #
 # Usage (from the nfc\ directory):
 #   pyinstaller NFC-Cooperative.spec --noconfirm
-#
-# Or via the build script:
-#   .\build.ps1 -Installer
 
 import sys
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 ROOT = Path(SPECPATH)
 
 block_cipher = None
 
+# Collect everything PyQt6 ships — binaries, datas, and hidden imports.
+qt_datas, qt_binaries, qt_hiddenimports = collect_all('PyQt6')
+
 a = Analysis(
     [str(ROOT / 'main.py')],
     pathex=[str(ROOT), str(ROOT / 'src')],
-    binaries=[],
-    datas=[
-        # Seed database — copied to %APPDATA%\NFC-Cooperative on first launch
+    binaries=qt_binaries,
+    datas=qt_datas + [
+        # Seed database
         (str(ROOT / 'data' / 'nfc_cooperative.db'), 'data'),
-        # Fonts used by ReportLab for PDF generation
+        # Fonts for ReportLab
         (str(ROOT / 'data' / 'fonts'), 'data/fonts'),
-        # Migration scripts — loaded at runtime via importlib
+        # Migration scripts loaded at runtime via importlib
         (str(ROOT / 'migrations' / '*.py'), 'migrations'),
-        (str(ROOT / 'migrations' / 'migrate.py'), 'migrations'),
+        # Bundle entire src/ tree so importlib.import_module('gui.x') works frozen
+        (str(ROOT / 'src'), 'src'),
     ],
-    hiddenimports=[
-        # reportlab registers fonts and codecs dynamically
+    hiddenimports=qt_hiddenimports + collect_submodules('gui') + collect_submodules('database') + collect_submodules('utils') + [
         'reportlab',
         'reportlab.lib',
         'reportlab.lib.colors',
@@ -45,45 +46,26 @@ a = Analysis(
         'reportlab.platypus.tables',
         'reportlab.platypus.paragraph',
         'reportlab.platypus.flowables',
-        # openpyxl uses pkg_resources for its templates
         'openpyxl',
         'openpyxl.styles',
         'openpyxl.utils',
         'openpyxl.workbook',
         'openpyxl.worksheet',
-        # dateutil
         'dateutil',
         'dateutil.relativedelta',
-        # bcrypt uses cffi
         'bcrypt',
-        'cffi',
-        '_cffi_backend',
-        # SQLite + importlib used to load migration files at runtime
         'sqlite3',
         'importlib.util',
     ],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[str(ROOT / 'hooks' / 'rthook_src_path.py')],
     excludes=[
-        # Keep the bundle lean
         'tkinter',
         'unittest',
-        'email',
-        'html',
-        'http',
-        'urllib',
-        'xmlrpc',
-        'xml',
         'pydoc',
         'doctest',
         'difflib',
-        'ftplib',
-        'getpass',
-        'getopt',
-        'calendar',
-        'cgi',
-        'csv',       # not used directly
         'curses',
         'antigravity',
     ],
@@ -105,14 +87,13 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,           # no terminal window
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
     icon=str(ROOT / 'assets' / 'app.ico') if (ROOT / 'assets' / 'app.ico').exists() else None,
-    version=str(ROOT / 'assets' / 'version.txt') if (ROOT / 'assets' / 'version.txt').exists() else None,
 )
 
 coll = COLLECT(
