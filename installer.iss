@@ -13,8 +13,8 @@ WizardStyle=modern
 DisableProgramGroupPage=yes
 ; lowest = no admin required, installs per-user
 PrivilegesRequired=lowest
-ArchitecturesAllowed=x64
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 ; Show a friendly icon in Add/Remove Programs
 UninstallDisplayIcon={app}\NFC-Cooperative.exe
 
