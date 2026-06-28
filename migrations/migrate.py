@@ -630,7 +630,12 @@ def migrate():
 
         type_code, _, rate, default_duration = mapped
         lt_id     = lt_map.get(type_code)
-        principal = abs(float(loan['Amount']))
+        import re as _re_amt
+        _amt_str = _re_amt.sub(r'[^0-9.]', '', str(loan['Amount']).strip())
+        if not _amt_str:
+            l_skip += 1
+            continue
+        principal = abs(float(_amt_str))
         import re as _re
         def _dur(v, d):
             digits = _re.sub(r"[^0-9]", "", str(v).strip()) if v else ""
