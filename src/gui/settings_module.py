@@ -173,7 +173,7 @@ class SettingsModule(QWidget):
         # Fee rows
         grp  = QGroupBox("Fee Configuration")
         form = QFormLayout(grp)
-        form.setSpacing(0)
+        form.setSpacing(12)
         form.setContentsMargins(16, 16, 16, 16)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
@@ -274,10 +274,18 @@ class SettingsModule(QWidget):
     # -------------------------------------------------------------------------
 
     def _dividends_tab(self) -> QWidget:
-        w, layout = QWidget(), QVBoxLayout()
-        w.setLayout(layout)
-        layout.setContentsMargins(20, 16, 20, 16)
-        layout.setSpacing(16)
+        outer = QWidget()
+        outer_layout = QVBoxLayout(outer)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setContentsMargins(20, 16, 20, 24)
+        layout.setSpacing(20)
 
         warn = QLabel(
             "⚠  MAJOR WARNING: Dividend settings are system-wide. "
@@ -297,45 +305,92 @@ class SettingsModule(QWidget):
         grp  = QGroupBox("Dividend Configuration")
         form = QFormLayout(grp)
         form.setSpacing(12)
+        form.setContentsMargins(16, 16, 16, 16)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        self.div_method = QComboBox()
-        self.div_method.setFixedHeight(36)
-        self.div_method.addItems(["percentage", "fixed"])
-        self.div_method.currentTextChanged.connect(self._on_div_method_change)
-
-        self.div_pct = QDoubleSpinBox()
-        self.div_pct.setFixedHeight(36)
-        self.div_pct.setRange(0, 100)
-        self.div_pct.setDecimals(2)
-        self.div_pct.setSuffix(" % of savings balance")
-
-        self.div_fixed = QDoubleSpinBox()
-        self.div_fixed.setFixedHeight(36)
-        self.div_fixed.setRange(0, 999_999_999)
-        self.div_fixed.setDecimals(2)
-        self.div_fixed.setSingleStep(1000)
-
-        form.addRow("Distribution Method:", self.div_method)
-        form.addRow("Percentage:", self.div_pct)
-        form.addRow("Fixed Amount:", self.div_fixed)
-        layout.addWidget(grp)
-
-        save_btn = QPushButton("Save Dividend Settings")
-        save_btn.setFixedHeight(40)
-        save_btn.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        save_btn.setStyleSheet("""
-            QPushButton { background-color: #922B21; color: white; border: none; border-radius: 4px; }
-            QPushButton:hover { background-color: #E74C3C; }
+        # Method row
+        method_row = QWidget()
+        method_layout = QHBoxLayout(method_row)
+        method_layout.setContentsMargins(0, 4, 0, 4)
+        method_layout.setSpacing(12)
+        self.div_method_lbl = QLabel("percentage")
+        self.div_method_lbl.setFixedWidth(200)
+        self.div_method_lbl.setFont(QFont("Segoe UI", 11))
+        self.div_method_lbl.setStyleSheet(
+            "background: #1A2535; border: 1px solid #2D3E50; "
+            "border-radius: 4px; padding: 6px 10px; color: #E6E6EB;"
+        )
+        edit_method_btn = QPushButton("Edit")
+        edit_method_btn.setFixedSize(70, 32)
+        edit_method_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        edit_method_btn.setStyleSheet("""
+            QPushButton { background-color: #2D3E50; color: #E6E6EB; border: 1px solid #3D5166; border-radius: 4px; font-size: 9pt; }
+            QPushButton:hover { background-color: #2980B9; color: white; }
         """)
-        save_btn.clicked.connect(self._save_dividend_settings)
-        layout.addWidget(save_btn)
+        edit_method_btn.clicked.connect(self._edit_div_method)
+        method_layout.addWidget(self.div_method_lbl)
+        method_layout.addWidget(edit_method_btn)
+        method_layout.addStretch()
+        form.addRow("Distribution Method:", method_row)
+
+        # Percentage row
+        pct_row = QWidget()
+        pct_layout = QHBoxLayout(pct_row)
+        pct_layout.setContentsMargins(0, 4, 0, 4)
+        pct_layout.setSpacing(12)
+        self.div_pct_lbl = QLabel("0.00 %")
+        self.div_pct_lbl.setFixedWidth(200)
+        self.div_pct_lbl.setFont(QFont("Segoe UI", 11))
+        self.div_pct_lbl.setStyleSheet(
+            "background: #1A2535; border: 1px solid #2D3E50; "
+            "border-radius: 4px; padding: 6px 10px; color: #E6E6EB;"
+        )
+        edit_pct_btn = QPushButton("Edit")
+        edit_pct_btn.setFixedSize(70, 32)
+        edit_pct_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        edit_pct_btn.setStyleSheet("""
+            QPushButton { background-color: #2D3E50; color: #E6E6EB; border: 1px solid #3D5166; border-radius: 4px; font-size: 9pt; }
+            QPushButton:hover { background-color: #2980B9; color: white; }
+        """)
+        edit_pct_btn.clicked.connect(self._edit_div_pct)
+        pct_layout.addWidget(self.div_pct_lbl)
+        pct_layout.addWidget(edit_pct_btn)
+        pct_layout.addStretch()
+        form.addRow("Percentage (% of savings):", pct_row)
+
+        # Fixed amount row
+        fixed_row = QWidget()
+        fixed_layout = QHBoxLayout(fixed_row)
+        fixed_layout.setContentsMargins(0, 4, 0, 4)
+        fixed_layout.setSpacing(12)
+        self.div_fixed_lbl = QLabel("₦0.00")
+        self.div_fixed_lbl.setFixedWidth(200)
+        self.div_fixed_lbl.setFont(QFont("Segoe UI", 11))
+        self.div_fixed_lbl.setStyleSheet(
+            "background: #1A2535; border: 1px solid #2D3E50; "
+            "border-radius: 4px; padding: 6px 10px; color: #E6E6EB;"
+        )
+        edit_fixed_btn = QPushButton("Edit")
+        edit_fixed_btn.setFixedSize(70, 32)
+        edit_fixed_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        edit_fixed_btn.setStyleSheet("""
+            QPushButton { background-color: #2D3E50; color: #E6E6EB; border: 1px solid #3D5166; border-radius: 4px; font-size: 9pt; }
+            QPushButton:hover { background-color: #2980B9; color: white; }
+        """)
+        edit_fixed_btn.clicked.connect(self._edit_div_fixed)
+        fixed_layout.addWidget(self.div_fixed_lbl)
+        fixed_layout.addWidget(edit_fixed_btn)
+        fixed_layout.addStretch()
+        form.addRow("Fixed Amount per Member:", fixed_row)
+
+        layout.addWidget(grp)
         layout.addStretch()
-        return w
+        scroll.setWidget(w)
+        outer_layout.addWidget(scroll)
+        return outer
 
     def _on_div_method_change(self, method):
-        self.div_pct.setEnabled(method == 'percentage')
-        self.div_fixed.setEnabled(method == 'fixed')
+        pass  # kept for compatibility
 
     # -------------------------------------------------------------------------
     # Users tab
@@ -540,6 +595,75 @@ class SettingsModule(QWidget):
             "This applies to all future operations only. "
             "No existing records have been changed."
         )
+
+    def _edit_div_method(self):
+        currency = self.db.get_setting('currency_symbol') or '₦'
+        current = self.db.get_setting('dividend_distribution_method') or 'percentage'
+        dlg = DivMethodEditDialog(current_method=current, parent=self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        new_method = dlg.new_method()
+        if new_method == current:
+            return
+        self.db.update_setting('dividend_distribution_method', new_method, self.user['username'])
+        self._load_dividend_settings()
+        QMessageBox.information(self, "Saved",
+            f"Distribution method changed to '{new_method}'.\n\nApplies to all future distributions only.")
+
+    def _edit_div_pct(self):
+        currency = self.db.get_setting('currency_symbol') or '₦'
+        current = float(self.db.get_setting('dividend_percentage') or 0)
+        dlg = FeeEditDialog(
+            label="Dividend Percentage",
+            current_value=current,
+            currency="",
+            changed_by=self.user['full_name'] or self.user['username'],
+            parent=self,
+            suffix=" %",
+            warning_text=(
+                "⚠  Changing the dividend percentage will affect ALL future\n"
+                "dividend distributions for ALL members.\n\n"
+                "• Existing distributions are not changed\n"
+                "• New distributions from this point use the updated %\n"
+                "• This action is logged\n\nDo you want to proceed?"
+            )
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        new_val = dlg.new_value()
+        if new_val == current:
+            return
+        self.db.update_setting('dividend_percentage', f"{new_val:.2f}", self.user['username'])
+        self._load_dividend_settings()
+        QMessageBox.information(self, "Saved",
+            f"Dividend percentage updated to {new_val:.2f}%.\nApplies to all future distributions only.")
+
+    def _edit_div_fixed(self):
+        currency = self.db.get_setting('currency_symbol') or '₦'
+        current = float(self.db.get_setting('dividend_fixed_amount') or 0)
+        dlg = FeeEditDialog(
+            label="Dividend Fixed Amount",
+            current_value=current,
+            currency=currency,
+            changed_by=self.user['full_name'] or self.user['username'],
+            parent=self,
+            warning_text=(
+                "⚠  Changing the fixed dividend amount will affect ALL future\n"
+                "dividend distributions for ALL members.\n\n"
+                "• Existing distributions are not changed\n"
+                "• New distributions from this point use the updated amount\n"
+                "• This action is logged\n\nDo you want to proceed?"
+            )
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        new_val = dlg.new_value()
+        if new_val == current:
+            return
+        self.db.update_setting('dividend_fixed_amount', f"{new_val:.2f}", self.user['username'])
+        self._load_dividend_settings()
+        QMessageBox.information(self, "Saved",
+            f"Dividend fixed amount updated to {currency}{new_val:,.2f}.\nApplies to all future distributions only.")
 
     def _save_notation(self):
         self.db.update_setting(
@@ -840,44 +964,101 @@ class SettingsModule(QWidget):
     # -------------------------------------------------------------------------
 
     def _add_savings_type(self):
+        # Step 1: danger warning
+        dlg_warn = DangerConfirmDialog(
+            "Add Savings Type",
+            "Adding a new savings type will make it available to all operators.\n\n"
+            "• Ensure the interest rate and minimum balance are correct before proceeding\n"
+            "• This will be immediately visible to all users\n\n"
+            "Do you want to proceed?",
+            confirm_word="ADD",
+            parent=self
+        )
+        if dlg_warn.exec() != QDialog.DialogCode.Accepted:
+            return
+        # Step 2: enter details
         dlg = SavingsTypeDialog(parent=self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            data = dlg.data()
-            if not self._confirm("Add Savings Type", f"Create savings type '{data['type_name']}'?"):
-                return
-            try:
-                self.db.execute(
-                    """INSERT INTO savings_types
-                       (type_code, type_name, description, interest_rate,
-                        minimum_balance, interest_enabled, is_active)
-                       VALUES (?,?,?,?,?,1,1)""",
-                    (data['type_code'].upper(), data['type_name'],
-                     data.get('description', ''),
-                     data['interest_rate'], data['minimum_balance'])
-                )
-                self.db.commit()
-                self._load_savings_types()
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to add savings type:\n{e}")
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        data = dlg.data()
+        # Step 3: confirm
+        currency = self.db.get_setting('currency_symbol') or '₦'
+        confirm = QMessageBox.question(
+            self, "Confirm New Savings Type",
+            f"Create savings type:\n\n"
+            f"  Code: {data['type_code'].upper()}\n"
+            f"  Name: {data['type_name']}\n"
+            f"  Interest Rate: {data['interest_rate']}%/month\n"
+            f"  Min Balance: {currency}{data['minimum_balance']:,.2f}\n\n"
+            "This will be immediately available to all operators.",
+            QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard,
+            QMessageBox.StandardButton.Discard
+        )
+        if confirm != QMessageBox.StandardButton.Save:
+            return
+        try:
+            self.db.execute(
+                """INSERT INTO savings_types
+                   (type_code, type_name, description, interest_rate,
+                    minimum_balance, interest_enabled, is_active)
+                   VALUES (?,?,?,?,?,1,1)""",
+                (data['type_code'].upper(), data['type_name'],
+                 data.get('description', ''),
+                 data['interest_rate'], data['minimum_balance'])
+            )
+            self.db.commit()
+            self._load_savings_types()
+            QMessageBox.information(self, "Created",
+                f"Savings type '{data['type_name']}' created successfully.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to add savings type:\n{e}")
 
     def _edit_savings_type(self):
         sid = self._selected_stype_id()
         if not sid: return
         stype = self.db.fetchone("SELECT * FROM savings_types WHERE savings_type_id=?", (sid,))
         if not stype: return
+        # Step 1: danger warning
+        dlg_warn = DangerConfirmDialog(
+            "Edit Savings Type",
+            f"You are about to edit '{stype['type_name']}'.\n\n"
+            "• Interest rate changes affect future interest calculations only\n"
+            "• Existing accounts are NOT retroactively updated\n"
+            "• This change is logged\n\n"
+            "Do you want to proceed?",
+            confirm_word="EDIT",
+            parent=self
+        )
+        if dlg_warn.exec() != QDialog.DialogCode.Accepted:
+            return
+        # Step 2: enter new values
         dlg = SavingsTypeDialog(stype=stype, parent=self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            data = dlg.data()
-            if not self._confirm("Edit Savings Type", f"Update '{stype['type_name']}'?"):
-                return
-            self.db.execute(
-                """UPDATE savings_types SET type_name=?, description=?,
-                   interest_rate=?, minimum_balance=? WHERE savings_type_id=?""",
-                (data['type_name'], data.get('description', ''),
-                 data['interest_rate'], data['minimum_balance'], sid)
-            )
-            self.db.commit()
-            self._load_savings_types()
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        data = dlg.data()
+        # Step 3: confirm / discard
+        currency = self.db.get_setting('currency_symbol') or '₦'
+        confirm = QMessageBox.question(
+            self, "Confirm Edit",
+            f"Update '{stype['type_name']}'?\n\n"
+            f"  Name: {stype['type_name']} → {data['type_name']}\n"
+            f"  Interest Rate: {stype['interest_rate']}% → {data['interest_rate']}%\n"
+            f"  Min Balance: {currency}{float(stype['minimum_balance']):,.2f} → {currency}{data['minimum_balance']:,.2f}\n\n"
+            "⚠  Applies to future operations only. Existing records unchanged.",
+            QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard,
+            QMessageBox.StandardButton.Discard
+        )
+        if confirm != QMessageBox.StandardButton.Save:
+            return
+        self.db.execute(
+            """UPDATE savings_types SET type_name=?, description=?,
+               interest_rate=?, minimum_balance=? WHERE savings_type_id=?""",
+            (data['type_name'], data.get('description', ''),
+             data['interest_rate'], data['minimum_balance'], sid)
+        )
+        self.db.commit()
+        self._load_savings_types()
+        QMessageBox.information(self, "Updated", f"Savings type '{data['type_name']}' updated.")
 
     def _toggle_savings_type(self):
         sid = self._selected_stype_id()
@@ -906,43 +1087,98 @@ class SettingsModule(QWidget):
     # -------------------------------------------------------------------------
 
     def _add_loan_type(self):
+        # Step 1: danger warning
+        dlg_warn = DangerConfirmDialog(
+            "Add Loan Type",
+            "Adding a new loan type will make it available for all future loans.\n\n"
+            "• Ensure the interest rate and duration are correct before proceeding\n"
+            "• This will be immediately available to all operators\n\n"
+            "Do you want to proceed?",
+            confirm_word="ADD",
+            parent=self
+        )
+        if dlg_warn.exec() != QDialog.DialogCode.Accepted:
+            return
+        # Step 2: enter details
         dlg = LoanTypeDialog(parent=self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            data = dlg.data()
-            if not self._confirm("Add Loan Type", f"Create loan type '{data['type_name']}'?"):
-                return
-            try:
-                self.db.execute(
-                    """INSERT INTO loan_types
-                       (type_code, type_name, description, interest_rate, max_duration_months, is_active)
-                       VALUES (?,?,?,?,?,1)""",
-                    (data['type_code'].upper(), data['type_name'],
-                     data.get('description', ''),
-                     data['interest_rate'], data['max_duration_months'])
-                )
-                self.db.commit()
-                self._load_loan_types()
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to add loan type:\n{e}")
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        data = dlg.data()
+        # Step 3: confirm / discard
+        confirm = QMessageBox.question(
+            self, "Confirm New Loan Type",
+            f"Create loan type:\n\n"
+            f"  Code: {data['type_code'].upper()}\n"
+            f"  Name: {data['type_name']}\n"
+            f"  Interest Rate: {data['interest_rate']}%\n"
+            f"  Max Duration: {data['max_duration_months']} months\n\n"
+            "This will be immediately available to all operators.",
+            QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard,
+            QMessageBox.StandardButton.Discard
+        )
+        if confirm != QMessageBox.StandardButton.Save:
+            return
+        try:
+            self.db.execute(
+                """INSERT INTO loan_types
+                   (type_code, type_name, description, interest_rate, max_duration_months, is_active)
+                   VALUES (?,?,?,?,?,1)""",
+                (data['type_code'].upper(), data['type_name'],
+                 data.get('description', ''),
+                 data['interest_rate'], data['max_duration_months'])
+            )
+            self.db.commit()
+            self._load_loan_types()
+            QMessageBox.information(self, "Created",
+                f"Loan type '{data['type_name']}' created successfully.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to add loan type:\n{e}")
 
     def _edit_loan_type(self):
         lid = self._selected_ltype_id()
         if not lid: return
         ltype = self.db.fetchone("SELECT * FROM loan_types WHERE loan_type_id=?", (lid,))
         if not ltype: return
+        # Step 1: danger warning
+        dlg_warn = DangerConfirmDialog(
+            "Edit Loan Type",
+            f"You are about to edit '{ltype['type_name']}'.\n\n"
+            "• Interest rate changes affect future loans only\n"
+            "• Existing active loans are NOT retroactively updated\n"
+            "• This change is logged\n\n"
+            "Do you want to proceed?",
+            confirm_word="EDIT",
+            parent=self
+        )
+        if dlg_warn.exec() != QDialog.DialogCode.Accepted:
+            return
+        # Step 2: enter new values
         dlg = LoanTypeDialog(ltype=ltype, parent=self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            data = dlg.data()
-            if not self._confirm("Edit Loan Type", f"Update '{ltype['type_name']}'?"):
-                return
-            self.db.execute(
-                """UPDATE loan_types SET type_name=?, description=?,
-                   interest_rate=?, max_duration_months=? WHERE loan_type_id=?""",
-                (data['type_name'], data.get('description', ''),
-                 data['interest_rate'], data['max_duration_months'], lid)
-            )
-            self.db.commit()
-            self._load_loan_types()
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        data = dlg.data()
+        # Step 3: confirm / discard
+        confirm = QMessageBox.question(
+            self, "Confirm Edit",
+            f"Update '{ltype['type_name']}'?\n\n"
+            f"  Name: {ltype['type_name']} → {data['type_name']}\n"
+            f"  Interest Rate: {ltype['interest_rate']}% → {data['interest_rate']}%\n"
+            f"  Max Duration: {ltype['max_duration_months']} → {data['max_duration_months']} months\n\n"
+            "⚠  Applies to future loans only. Existing active loans unchanged.",
+            QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard,
+            QMessageBox.StandardButton.Discard
+        )
+        if confirm != QMessageBox.StandardButton.Save:
+            return
+        self.db.execute(
+            """UPDATE loan_types SET type_name=?, description=?,
+               interest_rate=?, max_duration_months=? WHERE loan_type_id=?""",
+            (data['type_name'], data.get('description', ''),
+             data['interest_rate'], data['max_duration_months'], lid)
+        )
+        self.db.commit()
+        self._load_loan_types()
+        QMessageBox.information(self, "Updated", f"Loan type '{data['type_name']}' updated.")
 
     def _toggle_loan_type(self):
         lid = self._selected_ltype_id()
@@ -967,29 +1203,16 @@ class SettingsModule(QWidget):
         self._load_loan_types()
 
     def _load_dividend_settings(self):
+        currency = self.db.get_setting('currency_symbol') or '₦'
         method = self.db.get_setting('dividend_distribution_method') or 'percentage'
-        idx = self.div_method.findText(method)
-        if idx >= 0:
-            self.div_method.setCurrentIndex(idx)
-        self.div_pct.setValue(float(self.db.get_setting('dividend_percentage') or 0))
-        self.div_fixed.setValue(float(self.db.get_setting('dividend_fixed_amount') or 0))
-        self._on_div_method_change(method)
+        pct    = float(self.db.get_setting('dividend_percentage') or 0)
+        fixed  = float(self.db.get_setting('dividend_fixed_amount') or 0)
+        self.div_method_lbl.setText(method)
+        self.div_pct_lbl.setText(f"{pct:.2f} %")
+        self.div_fixed_lbl.setText(f"{currency}{fixed:,.2f}")
 
     def _save_dividend_settings(self):
-        dlg = DangerConfirmDialog(
-            "Save Dividend Settings",
-            "MAJOR WARNING: These settings are system-wide and will affect ALL future "
-            "dividend distributions.\n\nThis cannot be undone.",
-            confirm_word="SAVE",
-            parent=self
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        u = self.user['username']
-        self.db.update_setting('dividend_distribution_method', self.div_method.currentText(), u)
-        self.db.update_setting('dividend_percentage', f"{self.div_pct.value():.2f}", u)
-        self.db.update_setting('dividend_fixed_amount', f"{self.div_fixed.value():.2f}", u)
-        QMessageBox.information(self, "Saved", "Dividend settings saved.")
+        pass  # editing now done per-field via guarded dialogs
 
 
 # ---------------------------------------------------------------------------
@@ -1004,7 +1227,8 @@ class FeeEditDialog(QDialog):
     """
 
     def __init__(self, label: str, current_value: float,
-                 currency: str, changed_by: str, parent=None):
+                 currency: str, changed_by: str, parent=None,
+                 suffix: str = "", warning_text: str = None):
         super().__init__(parent)
         self.label         = label
         self.current_value = current_value
@@ -1012,7 +1236,9 @@ class FeeEditDialog(QDialog):
         self.changed_by    = changed_by
         self._new_value    = current_value
         self._note         = ""
-        self.setWindowTitle(f"Edit Fee — {label}")
+        self._suffix       = suffix
+        self._warning_text = warning_text
+        self.setWindowTitle(f"Edit — {label}")
         self.setFixedWidth(480)
         self._build()
 
@@ -1045,13 +1271,14 @@ class FeeEditDialog(QDialog):
         title.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
         layout.addWidget(title)
 
-        warn = QLabel(
+        warn_text = self._warning_text if self._warning_text else (
             "⚠  This change will affect ALL members going forward.\n\n"
             "• Current unpaid fees will NOT be changed\n"
             "• New fees from this point will use the updated amount\n"
             "• This action is logged and cannot be silently undone\n\n"
             "Do you want to proceed?"
         )
+        warn = QLabel(warn_text)
         warn.setWordWrap(True)
         warn.setStyleSheet("""
             QLabel {
@@ -1107,7 +1334,10 @@ class FeeEditDialog(QDialog):
         self._spin.setDecimals(2)
         self._spin.setSingleStep(500)
         self._spin.setValue(self.current_value)
-        self._spin.setPrefix(f"{self.currency} ")
+        if self.currency:
+            self._spin.setPrefix(f"{self.currency} ")
+        if self._suffix:
+            self._spin.setSuffix(self._suffix)
         self._spin.setFont(QFont("Segoe UI", 13))
         form.addRow("New Amount:", self._spin)
 
@@ -1218,6 +1448,58 @@ class FeeEditDialog(QDialog):
             self.reject()
         else:
             super().keyPressEvent(event)
+
+
+# ---------------------------------------------------------------------------
+# Dividend method edit dialog
+# ---------------------------------------------------------------------------
+
+class DivMethodEditDialog(QDialog):
+    def __init__(self, current_method: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Edit Distribution Method")
+        self.setFixedWidth(420)
+        self._current = current_method
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 16)
+        layout.setSpacing(16)
+
+        warn = QLabel(
+            "⚠  Changing the distribution method will affect ALL future dividend "
+            "distributions. Existing distributions are not changed."
+        )
+        warn.setWordWrap(True)
+        warn.setStyleSheet(
+            "background-color: #7B241C; color: #FADBD8; "
+            "border: 2px solid #E74C3C; border-radius: 4px; padding: 10px;"
+        )
+        layout.addWidget(warn)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        self.method_combo = QComboBox()
+        self.method_combo.setFixedHeight(36)
+        self.method_combo.addItems(["percentage", "fixed"])
+        idx = self.method_combo.findText(self._current)
+        if idx >= 0:
+            self.method_combo.setCurrentIndex(idx)
+        form.addRow("Method:", self.method_combo)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save |
+            QDialogButtonBox.StandardButton.Discard
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Save).clicked.connect(self.accept)
+        buttons.button(QDialogButtonBox.StandardButton.Discard).clicked.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def new_method(self) -> str:
+        return self.method_combo.currentText()
 
 
 # ---------------------------------------------------------------------------
