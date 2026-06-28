@@ -3,11 +3,28 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox,
     QDialog, QFormLayout, QLineEdit, QDialogButtonBox, QGroupBox,
     QComboBox, QTabWidget, QDoubleSpinBox, QCheckBox, QSpinBox,
-    QAbstractItemView, QScrollArea
+    QAbstractItemView, QScrollArea, QFrame
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QColor
 from gui.cooperative_fund_module import DangerConfirmDialog
+
+
+# ---------------------------------------------------------------------------
+# Fee definitions — single source of truth used by both the tab and history
+# ---------------------------------------------------------------------------
+FEE_FIELDS = [
+    ("admission_fee_amount",           "Admission Fee"),
+    ("readmission_fee_amount",         "Readmission Fee"),
+    ("withdrawal_fee_amount",          "Withdrawal Fee"),
+    ("death_charge_amount",            "Death Charge (charged to all members)"),
+    ("retirement_benefit_fee_amount",  "Retirement Benefits"),
+    ("loan_form_fee_amount",           "Sales of Loan Form"),
+    ("annual_fee_amount",              "Annual Fee"),
+    ("transfer_fee_amount",            "Transfer Fee"),
+    ("other_income_amount",            "Other Income"),
+    ("death_benefit_fee_amount",       "Death Benefit (paid to deceased account)"),
+]
 
 
 class SettingsModule(QWidget):
@@ -18,10 +35,6 @@ class SettingsModule(QWidget):
         self.user = app.current_user
         self._setup_ui()
         self.refresh()
-
-    # -------------------------------------------------------------------------
-    # UI
-    # -------------------------------------------------------------------------
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -59,8 +72,8 @@ class SettingsModule(QWidget):
         form.setSpacing(12)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        self.org_name    = QLineEdit(); self.org_name.setFixedHeight(36)
-        self.currency    = QLineEdit(); self.currency.setFixedHeight(36)
+        self.org_name = QLineEdit(); self.org_name.setFixedHeight(36)
+        self.currency = QLineEdit(); self.currency.setFixedHeight(36)
         self.currency.setMaximumWidth(80)
 
         form.addRow("Organisation Name:", self.org_name)
@@ -72,32 +85,32 @@ class SettingsModule(QWidget):
         form2.setSpacing(12)
         form2.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        self.death_enabled   = QCheckBox("Enable Death Benefit System")
-        self.death_amount    = QDoubleSpinBox()
+        self.death_enabled  = QCheckBox("Enable Death Benefit System")
+        self.death_amount   = QDoubleSpinBox()
         self.death_amount.setFixedHeight(36)
         self.death_amount.setRange(0, 999_999_999)
         self.death_amount.setDecimals(2)
         self.death_amount.setSingleStep(500)
 
-        self.retirement_pct  = QDoubleSpinBox()
+        self.retirement_pct = QDoubleSpinBox()
         self.retirement_pct.setFixedHeight(36)
         self.retirement_pct.setRange(0, 100)
         self.retirement_pct.setDecimals(2)
         self.retirement_pct.setSuffix(" %")
 
-        self.non_retire_pct  = QDoubleSpinBox()
+        self.non_retire_pct = QDoubleSpinBox()
         self.non_retire_pct.setFixedHeight(36)
         self.non_retire_pct.setRange(0, 100)
         self.non_retire_pct.setDecimals(2)
         self.non_retire_pct.setSuffix(" %")
 
-        self.interest_auto   = QCheckBox("Auto-calculate monthly interest")
+        self.interest_auto  = QCheckBox("Auto-calculate monthly interest")
 
-        form2.addRow("",                                    self.death_enabled)
-        form2.addRow("Death Benefit Amount:",               self.death_amount)
-        form2.addRow("Retirement Benefit (%):",             self.retirement_pct)
-        form2.addRow("Non-Retirement Charge (%):",          self.non_retire_pct)
-        form2.addRow("",                                    self.interest_auto)
+        form2.addRow("",                               self.death_enabled)
+        form2.addRow("Death Benefit Amount:",          self.death_amount)
+        form2.addRow("Retirement Benefit (%):",        self.retirement_pct)
+        form2.addRow("Non-Retirement Charge (%):",     self.non_retire_pct)
+        form2.addRow("",                               self.interest_auto)
         layout.addWidget(grp2)
 
         warn = QLabel("⚠  Changes to system settings affect all users and operations immediately.")
@@ -105,11 +118,8 @@ class SettingsModule(QWidget):
         warn.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
         warn.setStyleSheet("""
             QLabel {
-                background-color: #7D6608;
-                color: #FEF9E7;
-                border: 1px solid #F1C40F;
-                border-radius: 4px;
-                padding: 8px;
+                background-color: #7D6608; color: #FEF9E7;
+                border: 1px solid #F1C40F; border-radius: 4px; padding: 8px;
             }
         """)
         layout.addWidget(warn)
@@ -118,10 +128,7 @@ class SettingsModule(QWidget):
         save_btn.setFixedHeight(40)
         save_btn.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         save_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2980B9; color: white;
-                border: none; border-radius: 4px;
-            }
+            QPushButton { background-color: #2980B9; color: white; border: none; border-radius: 4px; }
             QPushButton:hover { background-color: #3498DB; }
         """)
         save_btn.clicked.connect(self._save_system_settings)
@@ -130,12 +137,10 @@ class SettingsModule(QWidget):
         return w
 
     # -------------------------------------------------------------------------
-    # Users tab
+    # Fees tab — read-only display with per-row Edit button
     # -------------------------------------------------------------------------
 
-
     def _fees_tab(self) -> QWidget:
-        # Outer widget that fills the tab and holds the scroll area
         outer = QWidget()
         outer_layout = QVBoxLayout(outer)
         outer_layout.setContentsMargins(0, 0, 0, 0)
@@ -145,65 +150,79 @@ class SettingsModule(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
 
-        # Inner scrollable widget
         w = QWidget()
         layout = QVBoxLayout(w)
         layout.setContentsMargins(20, 16, 20, 24)
         layout.setSpacing(20)
 
-        warn = QLabel("⚠  Fee changes apply to ALL future operations. "
-                      "Existing unpaid fees are not retroactively updated.")
+        warn = QLabel(
+            "⚠  Fee changes apply to ALL future operations only. "
+            "Existing records are never retroactively updated. "
+            "Every change is logged with the previous and new values."
+        )
         warn.setWordWrap(True)
         warn.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
         warn.setStyleSheet("""
             QLabel {
-                background-color: #7D6608;
-                color: #FEF9E7;
-                border: 1px solid #F1C40F;
-                border-radius: 4px;
-                padding: 8px;
+                background-color: #7D6608; color: #FEF9E7;
+                border: 1px solid #F1C40F; border-radius: 4px; padding: 8px;
             }
         """)
         layout.addWidget(warn)
 
+        # Fee rows
         grp  = QGroupBox("Fee Configuration")
         form = QFormLayout(grp)
-        form.setSpacing(16)
+        form.setSpacing(0)
         form.setContentsMargins(16, 16, 16, 16)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        def fee_spin():
-            s = QDoubleSpinBox()
-            s.setFixedHeight(40)
-            s.setRange(0, 999_999_999)
-            s.setDecimals(2)
-            s.setSingleStep(500)
-            return s
+        self._fee_rows = {}   # key -> {'label': QLabel, 'edit_btn': QPushButton}
 
-        self.admission_fee    = fee_spin()
-        self.readmission_fee  = fee_spin()
-        self.withdrawal_fee   = fee_spin()
-        self.death_charge     = fee_spin()
-        self.retirement_fee   = fee_spin()
-        self.loan_fee         = fee_spin()
-        self.annual_fee       = fee_spin()
-        self.transfer_fee     = fee_spin()
-        self.other_income     = fee_spin()
-        self.death_benefit    = fee_spin()
+        for key, label in FEE_FIELDS:
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 4, 0, 4)
+            row_layout.setSpacing(12)
 
-        form.addRow("Admission Fee:", self.admission_fee)
-        form.addRow("Readmission Fee:", self.readmission_fee)
-        form.addRow("Withdrawal Fee:", self.withdrawal_fee)
-        form.addRow("Death Charge (charged to all members):", self.death_charge)
-        form.addRow("Retirement Benefits:", self.retirement_fee)
-        form.addRow("Sales of Loan Form:", self.loan_fee)
-        form.addRow("Annual Fee:", self.annual_fee)
-        form.addRow("Transfer Fee:", self.transfer_fee)
-        form.addRow("Other Income:", self.other_income)
-        form.addRow("Death Benefit (paid to deceased account):", self.death_benefit)
+            value_lbl = QLabel("₦0.00")
+            value_lbl.setFixedWidth(160)
+            value_lbl.setFont(QFont("Segoe UI", 11))
+            value_lbl.setStyleSheet(
+                "background: #1A2535; border: 1px solid #2D3E50; "
+                "border-radius: 4px; padding: 6px 10px; color: #E6E6EB;"
+            )
+            value_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+            edit_btn = QPushButton("Edit")
+            edit_btn.setFixedSize(70, 32)
+            edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            edit_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #2D3E50; color: #E6E6EB;
+                    border: 1px solid #3D5166; border-radius: 4px; font-size: 9pt;
+                }
+                QPushButton:hover { background-color: #2980B9; color: white; }
+            """)
+            edit_btn.clicked.connect(lambda checked, k=key, lbl=label: self._edit_fee(k, lbl))
+
+            row_layout.addWidget(value_lbl)
+            row_layout.addWidget(edit_btn)
+            row_layout.addStretch()
+
+            form.addRow(label + ":", row_widget)
+
+            # Separator line
+            line = QFrame()
+            line.setFrameShape(QFrame.Shape.HLine)
+            line.setStyleSheet("color: #2D3E50;")
+            form.addRow(line)
+
+            self._fee_rows[key] = {'value_lbl': value_lbl, 'edit_btn': edit_btn}
 
         layout.addWidget(grp)
 
+        # Death benefit notation
         notation_grp  = QGroupBox("Death Benefit Notification")
         notation_form = QFormLayout(notation_grp)
         notation_form.setSpacing(10)
@@ -216,25 +235,43 @@ class SettingsModule(QWidget):
         hint = QLabel("Placeholder {member_name} will be replaced with deceased member name.")
         hint.setStyleSheet("color: #7F8C8D; font-size: 9pt;")
         notation_form.addRow("", hint)
-        layout.addWidget(notation_grp)
 
-        save_btn = QPushButton("Save Fee Settings")
-        save_btn.setFixedHeight(40)
-        save_btn.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        save_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2980B9; color: white;
-                border: none; border-radius: 4px;
-            }
+        save_notation_btn = QPushButton("Save Notation")
+        save_notation_btn.setFixedHeight(36)
+        save_notation_btn.setStyleSheet("""
+            QPushButton { background-color: #2980B9; color: white; border: none; border-radius: 4px; }
             QPushButton:hover { background-color: #3498DB; }
         """)
-        save_btn.clicked.connect(self._save_fee_settings)
-        layout.addWidget(save_btn)
-        layout.addStretch()
+        save_notation_btn.clicked.connect(self._save_notation)
+        notation_form.addRow("", save_notation_btn)
+        layout.addWidget(notation_grp)
 
+        # Fee history table
+        hist_grp = QGroupBox("Fee Change History")
+        hist_layout = QVBoxLayout(hist_grp)
+
+        self.fee_history_table = QTableWidget()
+        self.fee_history_table.setColumnCount(6)
+        self.fee_history_table.setHorizontalHeaderLabels([
+            "Date / Time", "Fee Type", "Previous Value", "New Value", "Changed By", "Note"
+        ])
+        self.fee_history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.fee_history_table.setAlternatingRowColors(True)
+        self.fee_history_table.verticalHeader().setVisible(False)
+        self.fee_history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.fee_history_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.fee_history_table.setMinimumHeight(200)
+        hist_layout.addWidget(self.fee_history_table)
+        layout.addWidget(hist_grp)
+
+        layout.addStretch()
         scroll.setWidget(w)
         outer_layout.addWidget(scroll)
         return outer
+
+    # -------------------------------------------------------------------------
+    # Dividends tab
+    # -------------------------------------------------------------------------
 
     def _dividends_tab(self) -> QWidget:
         w, layout = QWidget(), QVBoxLayout()
@@ -242,18 +279,17 @@ class SettingsModule(QWidget):
         layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(16)
 
-        warn = QLabel("⚠  MAJOR WARNING: Dividend settings are system-wide. "
-                      "Changing these values will affect ALL future distributions. "
-                      "Each distribution is permanent and irreversible.")
+        warn = QLabel(
+            "⚠  MAJOR WARNING: Dividend settings are system-wide. "
+            "Changing these values will affect ALL future distributions. "
+            "Each distribution is permanent and irreversible."
+        )
         warn.setWordWrap(True)
         warn.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
         warn.setStyleSheet("""
             QLabel {
-                background-color: #7B241C;
-                color: #FADBD8;
-                border: 2px solid #E74C3C;
-                border-radius: 4px;
-                padding: 10px;
+                background-color: #7B241C; color: #FADBD8;
+                border: 2px solid #E74C3C; border-radius: 4px; padding: 10px;
             }
         """)
         layout.addWidget(warn)
@@ -289,10 +325,7 @@ class SettingsModule(QWidget):
         save_btn.setFixedHeight(40)
         save_btn.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         save_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #922B21; color: white;
-                border: none; border-radius: 4px;
-            }
+            QPushButton { background-color: #922B21; color: white; border: none; border-radius: 4px; }
             QPushButton:hover { background-color: #E74C3C; }
         """)
         save_btn.clicked.connect(self._save_dividend_settings)
@@ -303,6 +336,10 @@ class SettingsModule(QWidget):
     def _on_div_method_change(self, method):
         self.div_pct.setEnabled(method == 'percentage')
         self.div_fixed.setEnabled(method == 'fixed')
+
+    # -------------------------------------------------------------------------
+    # Users tab
+    # -------------------------------------------------------------------------
 
     def _users_tab(self) -> QWidget:
         w, layout = QWidget(), QVBoxLayout()
@@ -321,8 +358,7 @@ class SettingsModule(QWidget):
         self.users_table = QTableWidget()
         self.users_table.setColumnCount(7)
         self.users_table.setHorizontalHeaderLabels([
-            "Username", "Full Name", "Role",
-            "Maintain", "Operate", "Reports", "Active"
+            "Username", "Full Name", "Role", "Maintain", "Operate", "Reports", "Active"
         ])
         self.users_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.users_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -456,6 +492,64 @@ class SettingsModule(QWidget):
         return w
 
     # -------------------------------------------------------------------------
+    # Fee editing — the full guarded flow
+    # -------------------------------------------------------------------------
+
+    def _edit_fee(self, key: str, label: str):
+        currency = self.db.get_setting('currency_symbol') or '₦'
+        current_val = float(self.db.get_setting(key) or 0)
+
+        dlg = FeeEditDialog(
+            label=label,
+            current_value=current_val,
+            currency=currency,
+            changed_by=self.user['full_name'] or self.user['username'],
+            parent=self
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        new_val  = dlg.new_value()
+        note     = dlg.note()
+
+        if new_val == current_val:
+            QMessageBox.information(self, "No Change", "The value was not changed.")
+            return
+
+        # Record the change in fee_history
+        self.db.record_fee_change(
+            fee_key=key,
+            fee_label=label,
+            old_value=current_val,
+            new_value=new_val,
+            changed_by=self.user['username'],
+            note=note or None
+        )
+
+        # Update the live setting
+        self.db.update_setting(key, f"{new_val:.2f}", self.user['username'])
+
+        # Refresh display
+        self._load_fee_settings()
+        self._load_fee_history()
+
+        QMessageBox.information(
+            self, "Fee Updated",
+            f"{label} updated from {currency}{current_val:,.2f} "
+            f"to {currency}{new_val:,.2f}.\n\n"
+            "This applies to all future operations only. "
+            "No existing records have been changed."
+        )
+
+    def _save_notation(self):
+        self.db.update_setting(
+            'death_benefit_notation',
+            self.death_notation.text().strip(),
+            self.user['username']
+        )
+        QMessageBox.information(self, "Saved", "Death benefit notation saved.")
+
+    # -------------------------------------------------------------------------
     # Helpers
     # -------------------------------------------------------------------------
 
@@ -489,7 +583,6 @@ class SettingsModule(QWidget):
         has = uid is not None
         self.edit_user_btn.setEnabled(has)
         self.pw_btn.setEnabled(has)
-        # cannot deactivate yourself
         if has:
             user = self.db.get_user_by_id(uid)
             self.deact_user_btn.setEnabled(
@@ -530,6 +623,7 @@ class SettingsModule(QWidget):
     def refresh(self):
         self._load_system_settings()
         self._load_fee_settings()
+        self._load_fee_history()
         self._load_dividend_settings()
         self._load_users()
         self._load_savings_types()
@@ -544,6 +638,48 @@ class SettingsModule(QWidget):
         self.non_retire_pct.setValue(float(self.db.get_setting('non_retirement_charge_percentage') or 0))
         self.interest_auto.setChecked(self.db.get_setting('interest_auto_calculate') == '1')
 
+    def _load_fee_settings(self):
+        currency = self.db.get_setting('currency_symbol') or '₦'
+        for key, _label in FEE_FIELDS:
+            val = float(self.db.get_setting(key) or 0)
+            row = self._fee_rows.get(key)
+            if row:
+                row['value_lbl'].setText(f"{currency}{val:,.2f}")
+        self.death_notation.setText(
+            self.db.get_setting('death_benefit_notation') or
+            'Death benefit charge — {member_name}'
+        )
+
+    def _load_fee_history(self):
+        history = self.db.get_fee_history()
+        currency = self.db.get_setting('currency_symbol') or '₦'
+        self.fee_history_table.setRowCount(len(history))
+        for row, h in enumerate(history):
+            def cell(val, align=Qt.AlignmentFlag.AlignLeft):
+                item = QTableWidgetItem(str(val) if val else "")
+                item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | align)
+                return item
+
+            old_v = float(h['old_value'])
+            new_v = float(h['new_value'])
+            direction = new_v > old_v
+
+            self.fee_history_table.setItem(row, 0, cell(h['changed_at']))
+            self.fee_history_table.setItem(row, 1, cell(h['fee_label']))
+
+            old_item = cell(f"{currency}{old_v:,.2f}", Qt.AlignmentFlag.AlignRight)
+            self.fee_history_table.setItem(row, 2, old_item)
+
+            new_item = cell(f"{currency}{new_v:,.2f}", Qt.AlignmentFlag.AlignRight)
+            new_item.setForeground(QColor("#27AE60") if direction else QColor("#E74C3C"))
+            self.fee_history_table.setItem(row, 3, new_item)
+
+            self.fee_history_table.setItem(row, 4, cell(h['changed_by']))
+            self.fee_history_table.setItem(row, 5, cell(h['note'] or ''))
+
+        self.fee_history_table.resizeColumnsToContents()
+        self.fee_history_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+
     def _load_users(self):
         users = self.db.get_all_users()
         self.users_table.setRowCount(len(users))
@@ -552,12 +688,8 @@ class SettingsModule(QWidget):
                 item = QTableWidgetItem(str(val) if val else "")
                 item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | align)
                 return item
-
             id_item = cell(u['username'])
             id_item.setData(Qt.ItemDataRole.UserRole, u['user_id'])
-            if not u['is_active']:
-                id_item.setForeground(QTableWidgetItem().foreground())
-                id_item.setStyleSheet = lambda: None
             self.users_table.setItem(row, 0, id_item)
             self.users_table.setItem(row, 1, cell(u['full_name'] or ''))
             self.users_table.setItem(row, 2, cell(u['role']))
@@ -566,10 +698,8 @@ class SettingsModule(QWidget):
                 self.users_table.setItem(row, col, v)
             active_item = cell("Yes" if u['is_active'] else "No", Qt.AlignmentFlag.AlignCenter)
             if not u['is_active']:
-                from PyQt6.QtGui import QColor
                 active_item.setForeground(QColor("#E74C3C"))
             self.users_table.setItem(row, 6, active_item)
-
         self.users_table.resizeColumnsToContents()
         self.users_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
 
@@ -589,7 +719,6 @@ class SettingsModule(QWidget):
             self.stypes_table.setItem(row, 3, cell(f"{s['minimum_balance']:,.2f}", Qt.AlignmentFlag.AlignRight))
             active_item = cell("Yes" if s['is_active'] else "No", Qt.AlignmentFlag.AlignCenter)
             if not s['is_active']:
-                from PyQt6.QtGui import QColor
                 active_item.setForeground(QColor("#E74C3C"))
             self.stypes_table.setItem(row, 4, active_item)
         self.stypes_table.resizeColumnsToContents()
@@ -611,7 +740,6 @@ class SettingsModule(QWidget):
             self.ltypes_table.setItem(row, 3, cell(f"{l['max_duration_months']} months", Qt.AlignmentFlag.AlignCenter))
             active_item = cell("Yes" if l['is_active'] else "No", Qt.AlignmentFlag.AlignCenter)
             if not l['is_active']:
-                from PyQt6.QtGui import QColor
                 active_item.setForeground(QColor("#E74C3C"))
             self.ltypes_table.setItem(row, 4, active_item)
         self.ltypes_table.resizeColumnsToContents()
@@ -633,13 +761,13 @@ class SettingsModule(QWidget):
             return
         u = self.user['username']
         settings = {
-            'organization_name':              self.org_name.text().strip(),
-            'currency_symbol':                self.currency.text().strip() or '₦',
-            'death_benefit_enabled':          '1' if self.death_enabled.isChecked() else '0',
-            'death_benefit_amount':           f"{self.death_amount.value():.2f}",
-            'retirement_benefit_percentage':  f"{self.retirement_pct.value():.2f}",
+            'organization_name':               self.org_name.text().strip(),
+            'currency_symbol':                 self.currency.text().strip() or '₦',
+            'death_benefit_enabled':           '1' if self.death_enabled.isChecked() else '0',
+            'death_benefit_amount':            f"{self.death_amount.value():.2f}",
+            'retirement_benefit_percentage':   f"{self.retirement_pct.value():.2f}",
             'non_retirement_charge_percentage': f"{self.non_retire_pct.value():.2f}",
-            'interest_auto_calculate':        '1' if self.interest_auto.isChecked() else '0',
+            'interest_auto_calculate':         '1' if self.interest_auto.isChecked() else '0',
         }
         for key, val in settings.items():
             self.db.update_setting(key, val, u)
@@ -715,8 +843,7 @@ class SettingsModule(QWidget):
         dlg = SavingsTypeDialog(parent=self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             data = dlg.data()
-            if not self._confirm("Add Savings Type",
-                                 f"Create savings type '{data['type_name']}'?"):
+            if not self._confirm("Add Savings Type", f"Create savings type '{data['type_name']}'?"):
                 return
             try:
                 self.db.execute(
@@ -736,15 +863,12 @@ class SettingsModule(QWidget):
     def _edit_savings_type(self):
         sid = self._selected_stype_id()
         if not sid: return
-        stype = self.db.fetchone(
-            "SELECT * FROM savings_types WHERE savings_type_id=?", (sid,)
-        )
+        stype = self.db.fetchone("SELECT * FROM savings_types WHERE savings_type_id=?", (sid,))
         if not stype: return
         dlg = SavingsTypeDialog(stype=stype, parent=self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             data = dlg.data()
-            if not self._confirm("Edit Savings Type",
-                                 f"Update '{stype['type_name']}'?"):
+            if not self._confirm("Edit Savings Type", f"Update '{stype['type_name']}'?"):
                 return
             self.db.execute(
                 """UPDATE savings_types SET type_name=?, description=?,
@@ -758,33 +882,22 @@ class SettingsModule(QWidget):
     def _toggle_savings_type(self):
         sid = self._selected_stype_id()
         if not sid: return
-        stype = self.db.fetchone(
-            "SELECT * FROM savings_types WHERE savings_type_id=?", (sid,)
-        )
+        stype = self.db.fetchone("SELECT * FROM savings_types WHERE savings_type_id=?", (sid,))
         if not stype: return
-        new_state  = 0 if stype['is_active'] else 1
-        action     = "Deactivate" if stype['is_active'] else "Activate"
-
+        new_state = 0 if stype['is_active'] else 1
+        action    = "Deactivate" if stype['is_active'] else "Activate"
         if stype['is_active']:
-            # check for active accounts
             count = self.db.fetchone(
                 "SELECT COUNT(*) as c FROM savings_accounts WHERE savings_type_id=? AND is_active=1",
                 (sid,)
             )['c']
             if count > 0:
-                QMessageBox.warning(
-                    self, "Cannot Deactivate",
-                    f"Cannot deactivate — {count} active accounts use this type."
-                )
+                QMessageBox.warning(self, "Cannot Deactivate",
+                                    f"Cannot deactivate — {count} active accounts use this type.")
                 return
-
-        if not self._confirm(f"{action} Savings Type",
-                             f"{action} '{stype['type_name']}'?"):
+        if not self._confirm(f"{action} Savings Type", f"{action} '{stype['type_name']}'?"):
             return
-        self.db.execute(
-            "UPDATE savings_types SET is_active=? WHERE savings_type_id=?",
-            (new_state, sid)
-        )
+        self.db.execute("UPDATE savings_types SET is_active=? WHERE savings_type_id=?", (new_state, sid))
         self.db.commit()
         self._load_savings_types()
 
@@ -796,14 +909,12 @@ class SettingsModule(QWidget):
         dlg = LoanTypeDialog(parent=self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             data = dlg.data()
-            if not self._confirm("Add Loan Type",
-                                 f"Create loan type '{data['type_name']}'?"):
+            if not self._confirm("Add Loan Type", f"Create loan type '{data['type_name']}'?"):
                 return
             try:
                 self.db.execute(
                     """INSERT INTO loan_types
-                       (type_code, type_name, description,
-                        interest_rate, max_duration_months, is_active)
+                       (type_code, type_name, description, interest_rate, max_duration_months, is_active)
                        VALUES (?,?,?,?,?,1)""",
                     (data['type_code'].upper(), data['type_name'],
                      data.get('description', ''),
@@ -817,15 +928,12 @@ class SettingsModule(QWidget):
     def _edit_loan_type(self):
         lid = self._selected_ltype_id()
         if not lid: return
-        ltype = self.db.fetchone(
-            "SELECT * FROM loan_types WHERE loan_type_id=?", (lid,)
-        )
+        ltype = self.db.fetchone("SELECT * FROM loan_types WHERE loan_type_id=?", (lid,))
         if not ltype: return
         dlg = LoanTypeDialog(ltype=ltype, parent=self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             data = dlg.data()
-            if not self._confirm("Edit Loan Type",
-                                 f"Update '{ltype['type_name']}'?"):
+            if not self._confirm("Edit Loan Type", f"Update '{ltype['type_name']}'?"):
                 return
             self.db.execute(
                 """UPDATE loan_types SET type_name=?, description=?,
@@ -839,75 +947,24 @@ class SettingsModule(QWidget):
     def _toggle_loan_type(self):
         lid = self._selected_ltype_id()
         if not lid: return
-        ltype = self.db.fetchone(
-            "SELECT * FROM loan_types WHERE loan_type_id=?", (lid,)
-        )
+        ltype = self.db.fetchone("SELECT * FROM loan_types WHERE loan_type_id=?", (lid,))
         if not ltype: return
         new_state = 0 if ltype['is_active'] else 1
         action    = "Deactivate" if ltype['is_active'] else "Activate"
-
         if ltype['is_active']:
             count = self.db.fetchone(
                 "SELECT COUNT(*) as c FROM loans WHERE loan_type_id=? AND status='Active'",
                 (lid,)
             )['c']
             if count > 0:
-                QMessageBox.warning(
-                    self, "Cannot Deactivate",
-                    f"Cannot deactivate — {count} active loans use this type."
-                )
+                QMessageBox.warning(self, "Cannot Deactivate",
+                                    f"Cannot deactivate — {count} active loans use this type.")
                 return
-
-        if not self._confirm(f"{action} Loan Type",
-                             f"{action} '{ltype['type_name']}'?"):
+        if not self._confirm(f"{action} Loan Type", f"{action} '{ltype['type_name']}'?"):
             return
-        self.db.execute(
-            "UPDATE loan_types SET is_active=? WHERE loan_type_id=?",
-            (new_state, lid)
-        )
+        self.db.execute("UPDATE loan_types SET is_active=? WHERE loan_type_id=?", (new_state, lid))
         self.db.commit()
         self._load_loan_types()
-
-
-    def _load_fee_settings(self):
-        self.admission_fee.setValue(float(self.db.get_setting('admission_fee_amount') or 0))
-        self.readmission_fee.setValue(float(self.db.get_setting('readmission_fee_amount') or 0))
-        self.withdrawal_fee.setValue(float(self.db.get_setting('withdrawal_fee_amount') or 0))
-        self.death_charge.setValue(float(self.db.get_setting('death_charge_amount') or 0))
-        self.retirement_fee.setValue(float(self.db.get_setting('retirement_benefit_fee_amount') or 0))
-        self.loan_fee.setValue(float(self.db.get_setting('loan_form_fee_amount') or 0))
-        self.annual_fee.setValue(float(self.db.get_setting('annual_fee_amount') or 0))
-        self.transfer_fee.setValue(float(self.db.get_setting('transfer_fee_amount') or 0))
-        self.other_income.setValue(float(self.db.get_setting('other_income_amount') or 0))
-        self.death_benefit.setValue(float(self.db.get_setting('death_benefit_fee_amount') or 0))
-        self.death_notation.setText(
-            self.db.get_setting('death_benefit_notation') or
-            'Death benefit charge — {member_name}'
-        )
-
-    def _save_fee_settings(self):
-        dlg = DangerConfirmDialog(
-            "Save Fee Settings",
-            "Fee changes apply to ALL future operations immediately.\n\n"
-            "Existing unpaid fees are not retroactively updated.",
-            confirm_word="SAVE",
-            parent=self
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        u = self.user['username']
-        self.db.update_setting('admission_fee_amount',        f"{self.admission_fee.value():.2f}", u)
-        self.db.update_setting('readmission_fee_amount',      f"{self.readmission_fee.value():.2f}", u)
-        self.db.update_setting('withdrawal_fee_amount',       f"{self.withdrawal_fee.value():.2f}", u)
-        self.db.update_setting('death_charge_amount',         f"{self.death_charge.value():.2f}", u)
-        self.db.update_setting('retirement_benefit_fee_amount', f"{self.retirement_fee.value():.2f}", u)
-        self.db.update_setting('loan_form_fee_amount',        f"{self.loan_fee.value():.2f}", u)
-        self.db.update_setting('annual_fee_amount',           f"{self.annual_fee.value():.2f}", u)
-        self.db.update_setting('transfer_fee_amount',         f"{self.transfer_fee.value():.2f}", u)
-        self.db.update_setting('other_income_amount',         f"{self.other_income.value():.2f}", u)
-        self.db.update_setting('death_benefit_fee_amount',    f"{self.death_benefit.value():.2f}", u)
-        self.db.update_setting('death_benefit_notation', self.death_notation.text().strip(), u)
-        QMessageBox.information(self, "Saved", "Fee settings saved.")
 
     def _load_dividend_settings(self):
         method = self.db.get_setting('dividend_distribution_method') or 'percentage'
@@ -929,13 +986,238 @@ class SettingsModule(QWidget):
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         u = self.user['username']
-        self.db.update_setting('dividend_distribution_method',
-                               self.div_method.currentText(), u)
-        self.db.update_setting('dividend_percentage',
-                               f"{self.div_pct.value():.2f}", u)
-        self.db.update_setting('dividend_fixed_amount',
-                               f"{self.div_fixed.value():.2f}", u)
+        self.db.update_setting('dividend_distribution_method', self.div_method.currentText(), u)
+        self.db.update_setting('dividend_percentage', f"{self.div_pct.value():.2f}", u)
+        self.db.update_setting('dividend_fixed_amount', f"{self.div_fixed.value():.2f}", u)
         QMessageBox.information(self, "Saved", "Dividend settings saved.")
+
+
+# ---------------------------------------------------------------------------
+# Fee edit dialog — the guarded 3-step flow
+# ---------------------------------------------------------------------------
+
+class FeeEditDialog(QDialog):
+    """
+    Step 1: danger warning + yes/no
+    Step 2: enter new value + optional note
+    Step 3: confirm/discard with impact statement
+    """
+
+    def __init__(self, label: str, current_value: float,
+                 currency: str, changed_by: str, parent=None):
+        super().__init__(parent)
+        self.label         = label
+        self.current_value = current_value
+        self.currency      = currency
+        self.changed_by    = changed_by
+        self._new_value    = current_value
+        self._note         = ""
+        self.setWindowTitle(f"Edit Fee — {label}")
+        self.setFixedWidth(480)
+        self._build()
+
+    def _build(self):
+        from PyQt6.QtWidgets import QStackedWidget
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.stack = QStackedWidget()
+        self.stack.addWidget(self._page_warn())     # 0
+        self.stack.addWidget(self._page_edit())     # 1
+        self.stack.addWidget(self._page_confirm())  # 2
+        layout.addWidget(self.stack)
+        self.stack.setCurrentIndex(0)
+
+    # Page 0 — danger warning
+    def _page_warn(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(24, 24, 24, 20)
+        layout.setSpacing(16)
+
+        icon = QLabel("⚠")
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon.setFont(QFont("Segoe UI", 32))
+        icon.setStyleSheet("color: #F39C12;")
+        layout.addWidget(icon)
+
+        title = QLabel(f"Edit: {self.label}")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
+        layout.addWidget(title)
+
+        warn = QLabel(
+            "⚠  This change will affect ALL members going forward.\n\n"
+            "• Current unpaid fees will NOT be changed\n"
+            "• New fees from this point will use the updated amount\n"
+            "• This action is logged and cannot be silently undone\n\n"
+            "Do you want to proceed?"
+        )
+        warn.setWordWrap(True)
+        warn.setStyleSheet("""
+            QLabel {
+                background-color: #7B241C; color: #FADBD8;
+                border: 2px solid #E74C3C; border-radius: 6px; padding: 14px;
+                font-size: 10pt; line-height: 1.5;
+            }
+        """)
+        layout.addWidget(warn)
+
+        current_lbl = QLabel(
+            f"Current value: {self.currency}{self.current_value:,.2f}"
+        )
+        current_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        current_lbl.setStyleSheet("color: #7F8C8D; font-size: 10pt;")
+        layout.addWidget(current_lbl)
+
+        btn_row = QHBoxLayout()
+        no_btn = QPushButton("No, Cancel")
+        no_btn.setFixedHeight(42)
+        no_btn.setStyleSheet("background-color: #2D3E50; color: #E6E6EB; border: none; border-radius: 4px;")
+        no_btn.clicked.connect(self.reject)
+
+        yes_btn = QPushButton("Yes, Proceed to Edit")
+        yes_btn.setFixedHeight(42)
+        yes_btn.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        yes_btn.setStyleSheet("background-color: #E74C3C; color: white; border: none; border-radius: 4px;")
+        yes_btn.clicked.connect(lambda: self.stack.setCurrentIndex(1))
+
+        btn_row.addWidget(no_btn)
+        btn_row.addWidget(yes_btn)
+        layout.addLayout(btn_row)
+        return page
+
+    # Page 1 — enter new value
+    def _page_edit(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(24, 24, 24, 20)
+        layout.setSpacing(16)
+
+        title = QLabel(f"New value for: {self.label}")
+        title.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        layout.addWidget(title)
+
+        form = QFormLayout()
+        form.setSpacing(12)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self._spin = QDoubleSpinBox()
+        self._spin.setFixedHeight(44)
+        self._spin.setRange(0, 999_999_999)
+        self._spin.setDecimals(2)
+        self._spin.setSingleStep(500)
+        self._spin.setValue(self.current_value)
+        self._spin.setPrefix(f"{self.currency} ")
+        self._spin.setFont(QFont("Segoe UI", 13))
+        form.addRow("New Amount:", self._spin)
+
+        self._note_input = QLineEdit()
+        self._note_input.setFixedHeight(36)
+        self._note_input.setPlaceholderText("Optional — reason for change")
+        form.addRow("Note:", self._note_input)
+
+        layout.addLayout(form)
+
+        btn_row = QHBoxLayout()
+        back_btn = QPushButton("← Back")
+        back_btn.setFixedHeight(40)
+        back_btn.setStyleSheet("background-color: #2D3E50; color: #E6E6EB; border: none; border-radius: 4px;")
+        back_btn.clicked.connect(lambda: self.stack.setCurrentIndex(0))
+
+        next_btn = QPushButton("Review & Confirm →")
+        next_btn.setFixedHeight(40)
+        next_btn.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        next_btn.setStyleSheet("background-color: #2980B9; color: white; border: none; border-radius: 4px;")
+        next_btn.clicked.connect(self._go_to_confirm)
+
+        btn_row.addWidget(back_btn)
+        btn_row.addWidget(next_btn)
+        layout.addLayout(btn_row)
+        return page
+
+    def _go_to_confirm(self):
+        self._new_value = self._spin.value()
+        self._note      = self._note_input.text().strip()
+
+        currency = self.currency
+        old_v    = self.current_value
+        new_v    = self._new_value
+        delta    = new_v - old_v
+        arrow    = "↑" if delta >= 0 else "↓"
+        color    = "#27AE60" if delta >= 0 else "#E74C3C"
+
+        self._confirm_summary.setText(
+            f"<b>Fee:</b> {self.label}<br><br>"
+            f"<b>Previous:</b> {currency}{old_v:,.2f}<br>"
+            f"<b>New value:</b> <span style='color:{color}'>{currency}{new_v:,.2f} {arrow}</span><br>"
+            f"<b>Change:</b> <span style='color:{color}'>{currency}{abs(delta):,.2f}</span><br>"
+            f"<b>Changed by:</b> {self.changed_by}<br>"
+            + (f"<b>Note:</b> {self._note}" if self._note else "")
+        )
+        self.stack.setCurrentIndex(2)
+
+    # Page 2 — confirm or discard
+    def _page_confirm(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(24, 24, 24, 20)
+        layout.setSpacing(16)
+
+        title = QLabel("Confirm Change")
+        title.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
+        layout.addWidget(title)
+
+        self._confirm_summary = QLabel()
+        self._confirm_summary.setWordWrap(True)
+        self._confirm_summary.setTextFormat(Qt.TextFormat.RichText)
+        self._confirm_summary.setStyleSheet("""
+            QLabel {
+                background-color: #1A2535; border: 1px solid #2D3E50;
+                border-radius: 6px; padding: 14px; font-size: 10pt;
+                line-height: 1.6;
+            }
+        """)
+        layout.addWidget(self._confirm_summary)
+
+        impact = QLabel(
+            "⚠  Saving this change will affect ALL members going forward. "
+            "Existing unpaid fees are NOT retroactively updated."
+        )
+        impact.setWordWrap(True)
+        impact.setStyleSheet(
+            "background-color: #7D6608; color: #FEF9E7; "
+            "border: 1px solid #F1C40F; border-radius: 4px; padding: 8px; font-size: 9pt;"
+        )
+        layout.addWidget(impact)
+
+        btn_row = QHBoxLayout()
+        discard_btn = QPushButton("Discard — Go Back")
+        discard_btn.setFixedHeight(42)
+        discard_btn.setStyleSheet("background-color: #2D3E50; color: #E6E6EB; border: none; border-radius: 4px;")
+        discard_btn.clicked.connect(lambda: self.stack.setCurrentIndex(1))
+
+        save_btn = QPushButton("Save Change")
+        save_btn.setFixedHeight(42)
+        save_btn.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        save_btn.setStyleSheet("background-color: #27AE60; color: white; border: none; border-radius: 4px;")
+        save_btn.clicked.connect(self.accept)
+
+        btn_row.addWidget(discard_btn)
+        btn_row.addWidget(save_btn)
+        layout.addLayout(btn_row)
+        return page
+
+    def new_value(self) -> float:
+        return self._new_value
+
+    def note(self) -> str:
+        return self._note
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            self.reject()
+        else:
+            super().keyPressEvent(event)
 
 
 # ---------------------------------------------------------------------------
@@ -987,7 +1269,7 @@ class UserDialog(QDialog):
         form.addRow("Full Name:", self.fullname_input)
         form.addRow("Role:",      self.role_combo)
         if not self.user:
-            form.addRow("Password:",  self.password_input)
+            form.addRow("Password:", self.password_input)
 
         layout.addLayout(form)
 
@@ -1002,7 +1284,6 @@ class UserDialog(QDialog):
             self.perm_operate.setChecked(bool(self.user.get('can_operate')))
             self.perm_reports.setChecked(bool(self.user.get('can_view_reports')))
         else:
-            # sensible defaults per role
             self.role_combo.currentTextChanged.connect(self._set_default_perms)
             self._set_default_perms(self.role_combo.currentText())
 
@@ -1033,11 +1314,11 @@ class UserDialog(QDialog):
 
     def data(self) -> dict:
         d = {
-            'username':        self.username_input.text().strip(),
-            'full_name':       self.fullname_input.text().strip(),
-            'role':            self.role_combo.currentText(),
-            'can_maintain':    int(self.perm_maintain.isChecked()),
-            'can_operate':     int(self.perm_operate.isChecked()),
+            'username':         self.username_input.text().strip(),
+            'full_name':        self.fullname_input.text().strip(),
+            'role':             self.role_combo.currentText(),
+            'can_maintain':     int(self.perm_maintain.isChecked()),
+            'can_operate':      int(self.perm_operate.isChecked()),
             'can_view_reports': int(self.perm_reports.isChecked()),
         }
         if not self.user:
@@ -1223,11 +1504,11 @@ class LoanTypeDialog(QDialog):
             self.rate_input.setValue(float(self.ltype['interest_rate']))
             self.duration_input.setValue(int(self.ltype['max_duration_months']))
 
-        form.addRow("Code:",         self.code_input)
-        form.addRow("Name:",         self.name_input)
-        form.addRow("Description:",  self.desc_input)
+        form.addRow("Code:",          self.code_input)
+        form.addRow("Name:",          self.name_input)
+        form.addRow("Description:",   self.desc_input)
         form.addRow("Interest Rate:", self.rate_input)
-        form.addRow("Max Duration:", self.duration_input)
+        form.addRow("Max Duration:",  self.duration_input)
         layout.addLayout(form)
 
         buttons = QDialogButtonBox(
@@ -1240,10 +1521,10 @@ class LoanTypeDialog(QDialog):
 
     def data(self) -> dict:
         return {
-            'type_code':          self.code_input.text().strip(),
-            'type_name':          self.name_input.text().strip(),
-            'description':        self.desc_input.text().strip(),
-            'interest_rate':      self.rate_input.value(),
+            'type_code':           self.code_input.text().strip(),
+            'type_name':           self.name_input.text().strip(),
+            'description':         self.desc_input.text().strip(),
+            'interest_rate':       self.rate_input.value(),
             'max_duration_months': self.duration_input.value(),
         }
 

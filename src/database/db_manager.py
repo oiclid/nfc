@@ -669,6 +669,27 @@ class DatabaseManager:
     def get_all_settings(self) -> List[Dict]:
         return self.fetchall("SELECT * FROM system_settings ORDER BY setting_key")
 
+    def record_fee_change(self, fee_key: str, fee_label: str,
+                          old_value: float, new_value: float,
+                          changed_by: str, note: str = None):
+        self.execute(
+            """INSERT INTO fee_history
+               (fee_key, fee_label, old_value, new_value, changed_by, note)
+               VALUES (?,?,?,?,?,?)""",
+            (fee_key, fee_label, old_value, new_value, changed_by, note)
+        )
+        self.commit()
+
+    def get_fee_history(self, fee_key: str = None) -> List[Dict]:
+        if fee_key:
+            return self.fetchall(
+                "SELECT * FROM fee_history WHERE fee_key=? ORDER BY changed_at DESC",
+                (fee_key,)
+            )
+        return self.fetchall(
+            "SELECT * FROM fee_history ORDER BY changed_at DESC"
+        )
+
     # -------------------------------------------------------------------------
     # Cooperative Fund
     # -------------------------------------------------------------------------
