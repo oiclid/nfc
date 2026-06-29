@@ -66,7 +66,7 @@ class MembersModule(QWidget):
 
         self.status_filter = QComboBox()
         self.status_filter.setFixedHeight(36)
-        self.status_filter.addItems(["Active", "Inactive", "Deceased", "All"])
+        self.status_filter.addItems(["All", "Active", "Inactive", "Deceased"])
         self.status_filter.currentIndexChanged.connect(self.refresh)
         filter_row.addWidget(self.status_filter)
 
@@ -213,6 +213,7 @@ class MembersModule(QWidget):
             members = [m for m in members if not m['is_active'] and not m['is_deceased']]
         elif status_filter == "Deceased":
             members = [m for m in members if m['is_deceased']]
+        # "All" shows everything
 
         stations = {s['station_id']: s['station_name']
                     for s in self.db.get_all_stations(enabled_only=False)}
