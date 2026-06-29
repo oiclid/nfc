@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox,
     QDialog, QFormLayout, QLineEdit, QDialogButtonBox, QGroupBox,
     QComboBox, QTabWidget, QDoubleSpinBox, QDateEdit, QSpinBox,
-    QAbstractItemView, QFrame
+    QAbstractItemView, QFrame, QScrollArea
 )
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QFont, QColor
@@ -101,7 +101,7 @@ class LoansModule(QWidget):
 
         self.status_filter = QComboBox()
         self.status_filter.setFixedHeight(36)
-        self.status_filter.addItems(["Active", "Completed", "All"])
+        self.status_filter.addItems(["All", "Active", "Defaulted", "Completed"])
         self.status_filter.currentIndexChanged.connect(self._load_loans)
         filter_row.addWidget(self.status_filter)
 
@@ -173,7 +173,7 @@ class LoansModule(QWidget):
         self.rep_date_from = QDateEdit()
         self.rep_date_from.setFixedHeight(36)
         self.rep_date_from.setCalendarPopup(True)
-        self.rep_date_from.setDate(QDate.currentDate().addMonths(-1))
+        self.rep_date_from.setDate(QDate(2000, 1, 1))
         self.rep_date_from.setDisplayFormat("dd/MM/yyyy")
         self.rep_date_from.dateChanged.connect(self._load_repayments)
         filter_row.addWidget(self.rep_date_from)
@@ -208,14 +208,25 @@ class LoansModule(QWidget):
         return w
 
     def _disburse_tab(self) -> QWidget:
+        outer = QWidget()
+        outer_layout = QVBoxLayout(outer)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
         w      = QWidget()
         layout = QVBoxLayout(w)
-        layout.setContentsMargins(0, 12, 0, 0)
-        layout.setSpacing(16)
+        layout.setContentsMargins(8, 12, 8, 20)
+        layout.setSpacing(20)
 
         form_group = QGroupBox("New Loan Disbursement")
         form       = QFormLayout(form_group)
-        form.setSpacing(12)
+        form.setSpacing(14)
+        form.setVerticalSpacing(14)
+        form.setContentsMargins(16, 20, 16, 20)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         self.dis_member_input = QLineEdit()
@@ -319,9 +330,12 @@ class LoansModule(QWidget):
         layout.addWidget(disburse_btn)
         layout.addStretch()
 
+        scroll.setWidget(w)
+        outer_layout.addWidget(scroll)
+
         # trigger initial state
         self._on_loan_type_change()
-        return w
+        return outer
 
     # -------------------------------------------------------------------------
     # Helpers
