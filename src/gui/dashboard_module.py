@@ -147,10 +147,11 @@ class DashboardModule(QWidget):
             FROM savings_accounts WHERE is_active=1
         """)
         loans = self.db.fetchone("""
-            SELECT COUNT(*) as active_loans,
-                   ROUND(SUM(balance_outstanding),2) as outstanding
-            FROM loans WHERE status='Active'
+            SELECT COUNT(CASE WHEN status='Active' THEN 1 END) as active_loans,
+                   ROUND(SUM(CASE WHEN status='Active' THEN balance_outstanding ELSE 0 END),2) as outstanding
+            FROM loans
         """)
+
         txns = self.db.fetchone("""
             SELECT COUNT(*) as total FROM transactions
         """)
