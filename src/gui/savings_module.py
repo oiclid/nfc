@@ -193,7 +193,7 @@ class SavingsModule(QWidget):
         self.date_from = QDateEdit()
         self.date_from.setFixedHeight(36)
         self.date_from.setCalendarPopup(True)
-        self.date_from.setDate(QDate.currentDate().addMonths(-1))
+        self.date_from.setDate(QDate(2000, 1, 1))
         self.date_from.setDisplayFormat("dd/MM/yyyy")
         self.date_from.dateChanged.connect(self._load_transactions)
         filter_row.addWidget(self.date_from)
