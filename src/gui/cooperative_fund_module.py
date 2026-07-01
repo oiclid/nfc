@@ -100,6 +100,7 @@ class CooperativeFundModule(QWidget):
         self.tabs.addTab(self._transactions_tab(),   "Fund Transactions")
         self.tabs.addTab(self._admission_fees_tab(), "Admission Fees")
         self.tabs.addTab(self._annual_fees_tab(),    "Annual Fees")
+        self.tabs.addTab(self._other_fees_tab(),     "Other Fees")
         self.tabs.addTab(self._dividends_tab(),      "Dividends")
         layout.addWidget(self.tabs)
 
@@ -268,6 +269,98 @@ class CooperativeFundModule(QWidget):
         layout.addWidget(self.af_summary)
         return w
 
+    def _other_fees_tab(self) -> QWidget:
+        w, layout = QWidget(), QVBoxLayout()
+        w.setLayout(layout)
+        layout.setContentsMargins(0, 8, 0, 0)
+        layout.setSpacing(10)
+
+        # Fee summary cards row
+        self.other_fee_cards_layout = QHBoxLayout()
+        self.other_fee_cards_layout.setSpacing(10)
+        layout.addLayout(self.other_fee_cards_layout)
+
+        # Charge buttons row (Admin only)
+        if self.user.get('role') == 'Admin':
+            btn_row = QHBoxLayout()
+            btn_row.setSpacing(8)
+
+            self._fee_buttons = {}
+            fee_actions = [
+                ("Readmission Fee",     "readmission",  "#8E44AD"),
+                ("Withdrawal Fee",      "withdrawal",   "#E67E22"),
+                ("Transfer Fee",        "transfer",     "#2980B9"),
+                ("Loan Form Fee",       "loan_form",    "#16A085"),
+                ("Death Charge",        "death_charge", "#7B241C"),
+            ]
+            for label, key, colour in fee_actions:
+                btn = QPushButton(f"Charge {label}")
+                btn.setFixedHeight(34)
+                btn.setStyleSheet(f"color: {colour}; font-weight: 600;")
+                btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn.clicked.connect(lambda checked, k=key, l=label: self._charge_other_fee(k, l))
+                self._fee_buttons[key] = btn
+                btn_row.addWidget(btn)
+            btn_row.addStretch()
+            layout.addLayout(btn_row)
+
+        # Filter row
+        filter_row = QHBoxLayout()
+        self.of_search = QLineEdit()
+        self.of_search.setPlaceholderText("Search member ID or description...")
+        self.of_search.setFixedHeight(36)
+        self.of_search.textChanged.connect(self._load_other_fees)
+        filter_row.addWidget(self.of_search, 2)
+
+        self.of_type_filter = QComboBox()
+        self.of_type_filter.setFixedHeight(36)
+        self.of_type_filter.addItems([
+            "All Fee Types",
+            "Readmission Fee",
+            "Withdrawal Fee",
+            "Transfer Fee",
+            "Loan Form Fee",
+            "Death Charge",
+        ])
+        self.of_type_filter.currentIndexChanged.connect(self._load_other_fees)
+        filter_row.addWidget(self.of_type_filter, 1)
+
+        self.of_date_from = QDateEdit()
+        self.of_date_from.setFixedHeight(36)
+        self.of_date_from.setCalendarPopup(True)
+        self.of_date_from.setDate(QDate(2000, 1, 1))
+        self.of_date_from.setDisplayFormat("dd/MM/yyyy")
+        self.of_date_from.dateChanged.connect(self._load_other_fees)
+        filter_row.addWidget(QLabel("From:"))
+        filter_row.addWidget(self.of_date_from)
+
+        self.of_date_to = QDateEdit()
+        self.of_date_to.setFixedHeight(36)
+        self.of_date_to.setCalendarPopup(True)
+        self.of_date_to.setDate(QDate.currentDate())
+        self.of_date_to.setDisplayFormat("dd/MM/yyyy")
+        self.of_date_to.dateChanged.connect(self._load_other_fees)
+        filter_row.addWidget(QLabel("To:"))
+        filter_row.addWidget(self.of_date_to)
+        layout.addLayout(filter_row)
+
+        self.of_table = QTableWidget()
+        self.of_table.setColumnCount(6)
+        self.of_table.setHorizontalHeaderLabels([
+            "Date", "Member ID", "Member Name", "Fee Type", "Amount", "Recorded By"
+        ])
+        self.of_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.of_table.setAlternatingRowColors(True)
+        self.of_table.verticalHeader().setVisible(False)
+        self.of_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.of_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(self.of_table)
+
+        self.of_summary = QLabel()
+        self.of_summary.setStyleSheet("color: #7F8C8D;")
+        layout.addWidget(self.of_summary)
+        return w
+
     def _dividends_tab(self) -> QWidget:
         w, layout = QWidget(), QVBoxLayout()
         w.setLayout(layout)
@@ -338,6 +431,7 @@ class CooperativeFundModule(QWidget):
         self._load_fund_transactions()
         self._load_admission_fees()
         self._load_annual_fees()
+        self._load_other_fees()
         self._load_dividends()
 
     def _load_fund_transactions(self):
@@ -508,6 +602,95 @@ class CooperativeFundModule(QWidget):
             f"Paid: {self._fmt(paid_total)}"
         )
 
+    def _load_other_fees(self):
+        # Pull from cooperative_fund_transactions for non-admission, non-annual fee categories
+        other_fee_cats = [
+            "Readmission Fee", "Withdrawal Fee", "Transfer Fee",
+            "Loan Form Fee", "Death Charge",
+        ]
+        search     = self.of_search.text().strip()
+        type_sel   = self.of_type_filter.currentText()
+        date_from  = self.of_date_from.date().toString("yyyy-MM-dd")
+        date_to    = self.of_date_to.date().toString("yyyy-MM-dd")
+
+        placeholders = ",".join("?" * len(other_fee_cats))
+        q = f"""
+            SELECT cft.txn_date, cft.member_id, cft.category,
+                   cft.amount, cft.created_by,
+                   m.first_name, m.last_name
+            FROM cooperative_fund_transactions cft
+            LEFT JOIN members m ON cft.member_id = m.member_id
+            WHERE cft.category IN ({placeholders})
+              AND cft.txn_date >= ? AND cft.txn_date <= ?
+        """
+        params = list(other_fee_cats) + [date_from, date_to]
+
+        if type_sel != "All Fee Types":
+            q += " AND cft.category = ?"
+            params.append(type_sel)
+
+        if search:
+            q += " AND (cft.member_id LIKE ? OR cft.description LIKE ?)"
+            like = f"%{search}%"
+            params.extend([like, like])
+
+        q += " ORDER BY cft.txn_date DESC, cft.fund_txn_id DESC"
+        rows = self.db.fetchall(q, tuple(params))
+
+        # Fee summary cards — configured amounts from settings
+        fee_config = [
+            ("Readmission Fee",  "readmission_fee_amount"),
+            ("Withdrawal Fee",   "withdrawal_fee_amount"),
+            ("Transfer Fee",     "transfer_fee_amount"),
+            ("Loan Form Fee",    "loan_form_fee_amount"),
+            ("Death Charge",     "death_charge_amount"),
+        ]
+        # Clear and rebuild cards
+        while self.other_fee_cards_layout.count():
+            item = self.other_fee_cards_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        for fee_label, setting_key in fee_config:
+            amount = float(self.db.get_setting(setting_key) or 0)
+            card = QGroupBox(fee_label)
+            card.setStyleSheet("QGroupBox { border: 1px solid #3D3D4A; border-radius: 6px; padding: 8px; font-size: 9pt; }")
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(8, 12, 8, 8)
+            val_lbl = QLabel(self._fmt(amount))
+            val_lbl.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+            val_lbl.setStyleSheet("color: #2980B9;")
+            card_layout.addWidget(val_lbl)
+            self.other_fee_cards_layout.addWidget(card)
+        self.other_fee_cards_layout.addStretch()
+
+        # Populate table
+        self.of_table.setRowCount(len(rows))
+        total = 0.0
+
+        for row, r in enumerate(rows):
+            amount = float(r['amount'] or 0)
+            total += amount
+            name = f"{r['first_name'] or ''} {r['last_name'] or ''}".strip() if r['first_name'] else "—"
+
+            def cell(val, align=Qt.AlignmentFlag.AlignLeft):
+                item = QTableWidgetItem(str(val) if val else "")
+                item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | align)
+                return item
+
+            self.of_table.setItem(row, 0, cell(r['txn_date']))
+            self.of_table.setItem(row, 1, cell(r['member_id'] or ""))
+            self.of_table.setItem(row, 2, cell(name))
+            self.of_table.setItem(row, 3, cell(r['category']))
+            self.of_table.setItem(row, 4, cell(self._fmt(amount), Qt.AlignmentFlag.AlignRight))
+            self.of_table.setItem(row, 5, cell(r['created_by'] or ""))
+
+        self.of_table.resizeColumnsToContents()
+        self.of_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.of_summary.setText(
+            f"{len(rows)} record(s)  —  Total collected: {self._fmt(total)}"
+        )
+
     def _load_dividends(self):
         rows = self.db.get_dividends_history()
         self.div_table.setRowCount(len(rows))
@@ -638,6 +821,74 @@ class CooperativeFundModule(QWidget):
             )
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed:\n{e}")
+
+    def _charge_other_fee(self, fee_key: str, fee_label: str):
+        from PyQt6.QtWidgets import QInputDialog
+
+        setting_map = {
+            "readmission":  "readmission_fee_amount",
+            "withdrawal":   "withdrawal_fee_amount",
+            "transfer":     "transfer_fee_amount",
+            "loan_form":    "loan_form_fee_amount",
+            "death_charge": "death_charge_amount",
+        }
+        setting_key = setting_map.get(fee_key)
+        amount = float(self.db.get_setting(setting_key) or 0) if setting_key else 0
+
+        if amount <= 0:
+            QMessageBox.warning(
+                self, "Not Configured",
+                f"{fee_label} is set to zero.\n"
+                "Configure it under Settings → Fees first."
+            )
+            return
+
+        member_id, ok = QInputDialog.getText(
+            self, f"Charge {fee_label}", "Enter Member ID:"
+        )
+        if not ok or not member_id.strip():
+            return
+        member_id = member_id.strip().upper()
+        member = self.db.get_member(member_id)
+        if not member:
+            QMessageBox.warning(self, "Not Found", f"Member '{member_id}' not found.")
+            return
+
+        name = f"{member['first_name']} {member['last_name']}"
+        if not self._confirm(
+            f"Charge {fee_label}",
+            f"Charge {fee_label} of {self._fmt(amount)} for {name} ({member_id})?\n\n"
+            "This will credit the cooperative fund."
+        ):
+            return
+
+        try:
+            method_map = {
+                "readmission":  self.db.charge_readmission_fee,
+                "withdrawal":   self.db.charge_withdrawal_fee,
+                "transfer":     lambda mid, by: self.db._credit_fund(
+                    float(self.db.get_setting('transfer_fee_amount') or 0),
+                    "Transfer Fee",
+                    f"Transfer fee — {mid}",
+                    member_id=mid, created_by=by
+                ),
+                "loan_form":    lambda mid, by: self.db.charge_loan_form_fee(None, mid, by),
+            }
+            if fee_key == "death_charge":
+                QMessageBox.information(
+                    self, "Use Death Benefits Module",
+                    "Death charges are applied automatically via the Death Benefits module."
+                )
+                return
+            method_map[fee_key](member_id, self.user['username'])
+            self.db.commit()
+            self.refresh()
+            QMessageBox.information(
+                self, f"{fee_label} Charged",
+                f"{self._fmt(amount)} charged for {name}."
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to charge {fee_label}:\n{e}")
 
     def _record_other_income(self):
         dlg = OtherIncomeDialog(self.currency, parent=self)
